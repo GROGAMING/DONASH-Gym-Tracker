@@ -1,17 +1,26 @@
 export const runtime = "nodejs";
 
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET(req: Request) {
   const authed = cookies().get("admin_authed")?.value === "1";
-  if (!authed) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!authed) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
 
   const url = new URL(req.url);
   const weekStart = url.searchParams.get("weekStart");
-  if (!weekStart) return NextResponse.json({ error: "Missing weekStart" }, { status: 400 });
+  if (!weekStart) {
+    return new Response(JSON.stringify({ error: "Missing weekStart" }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  }
 
   const [weekly, overall, users] = await Promise.all([
     supabaseAdmin.rpc("get_leaderboard_week", { p_week_start: weekStart }),
@@ -19,9 +28,24 @@ export async function GET(req: Request) {
     supabaseAdmin.from("users").select("name").order("name"),
   ]);
 
-  if (weekly.error) return NextResponse.json({ error: weekly.error.message }, { status: 500 });
-  if (overall.error) return NextResponse.json({ error: overall.error.message }, { status: 500 });
-  if (users.error) return NextResponse.json({ error: users.error.message }, { status: 500 });
+  if (weekly.error) {
+    return new Response(JSON.stringify({ error: weekly.error.message }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  if (overall.error) {
+    return new Response(JSON.stringify({ error: overall.error.message }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  if (users.error) {
+    return new Response(JSON.stringify({ error: users.error.message }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  }
 
   const weeklyRows = (weekly.data ?? []) as { name: string; count: number }[];
   const overallRows = (overall.data ?? []) as { name: string; count: number }[];
@@ -33,11 +57,11 @@ export async function GET(req: Request) {
 
   const doc = new PDFDocument({ margin: 40 });
   const chunks: Uint8Array[] = [];
+
   doc.on("data", (c: Uint8Array) => chunks.push(c));
 
-  const pdfUint8 = await new Promise<Uint8Array>((resolve) => {
+  const pdfBytes = await new Promise<Uint8Array>((resolve) => {
     doc.on("end", () => {
-      // Combine chunks into one Uint8Array
       const total = chunks.reduce((sum, a) => sum + a.length, 0);
       const merged = new Uint8Array(total);
       let offset = 0;
@@ -77,10 +101,13 @@ export async function GET(req: Request) {
     doc.end();
   });
 
-  return new NextResponse(pdfUint8, {
+  const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+
+  return new Response(pdfBlob, {
     headers: {
       "content-type": "application/pdf",
       "content-disposition": `attachment; filename="gym-report-${weekStart}.pdf"`,
     },
   });
 }
+
