@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   if (!authed) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json" }
     });
   }
 
@@ -18,32 +18,21 @@ export async function GET(req: Request) {
   if (!weekStart) {
     return new Response(JSON.stringify({ error: "Missing weekStart" }), {
       status: 400,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json" }
     });
   }
 
   const [weekly, overall, users] = await Promise.all([
     supabaseAdmin.rpc("get_leaderboard_week", { p_week_start: weekStart }),
     supabaseAdmin.rpc("get_leaderboard_overall"),
-    supabaseAdmin.from("users").select("name").order("name"),
+    supabaseAdmin.from("users").select("name").order("name")
   ]);
 
-  if (weekly.error) {
-    return new Response(JSON.stringify({ error: weekly.error.message }), {
+  const errMsg = weekly.error?.message || overall.error?.message || users.error?.message;
+  if (errMsg) {
+    return new Response(JSON.stringify({ error: errMsg }), {
       status: 500,
-      headers: { "content-type": "application/json" },
-    });
-  }
-  if (overall.error) {
-    return new Response(JSON.stringify({ error: overall.error.message }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    });
-  }
-  if (users.error) {
-    return new Response(JSON.stringify({ error: users.error.message }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json" }
     });
   }
 
@@ -56,58 +45,47 @@ export async function GET(req: Request) {
   const notMet = allNames.filter((n) => (weeklyMap.get(n) ?? 0) < 2);
 
   const doc = new PDFDocument({ margin: 40 });
-  const chunks: Uint8Array[] = [];
 
-  doc.on("data", (c: Uint8Array) => chunks.push(c));
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      doc.on("data", (chunk: Uint8Array) => controller.enqueue(chunk));
+      doc.on("end", () => controller.close());
+      doc.on("error", (err: any) => controller.error(err));
 
-  const pdfBytes = await new Promise<Uint8Array>((resolve) => {
-    doc.on("end", () => {
-      const total = chunks.reduce((sum, a) => sum + a.length, 0);
-      const merged = new Uint8Array(total);
-      let offset = 0;
-      for (const a of chunks) {
-        merged.set(a, offset);
-        offset += a.length;
-      }
-      resolve(merged);
-    });
+      doc.fontSize(18).text("Gym Tracker Weekly Report");
+      doc.moveDown(0.5);
+      doc.fontSize(12).text(`Week starting: ${weekStart}`);
+      doc.moveDown();
 
-    doc.fontSize(18).text("Gym Tracker Weekly Report");
-    doc.moveDown(0.5);
-    doc.fontSize(12).text(`Week starting: ${weekStart}`);
-    doc.moveDown();
+      doc.fontSize(14).text("This week leaderboard");
+      doc.moveDown(0.5);
+      if (weeklyRows.length === 0) doc.fontSize(12).text("No uploads.");
+      weeklyRows.forEach((r, i) => doc.fontSize(12).text(`${i + 1}. ${r.name}: ${r.count}`));
+      doc.moveDown();
 
-    doc.fontSize(14).text("This week leaderboard");
-    doc.moveDown(0.5);
-    if (weeklyRows.length === 0) doc.fontSize(12).text("No uploads.");
-    weeklyRows.forEach((r, i) => doc.fontSize(12).text(`${i + 1}. ${r.name}: ${r.count}`));
-    doc.moveDown();
+      doc.fontSize(14).text("Overall leaderboard");
+      doc.moveDown(0.5);
+      if (overallRows.length === 0) doc.fontSize(12).text("No uploads.");
+      overallRows.forEach((r, i) => doc.fontSize(12).text(`${i + 1}. ${r.name}: ${r.count}`));
+      doc.moveDown();
 
-    doc.fontSize(14).text("Overall leaderboard");
-    doc.moveDown(0.5);
-    if (overallRows.length === 0) doc.fontSize(12).text("No uploads.");
-    overallRows.forEach((r, i) => doc.fontSize(12).text(`${i + 1}. ${r.name}: ${r.count}`));
-    doc.moveDown();
+      doc.fontSize(14).text("Met 2 this week");
+      doc.moveDown(0.5);
+      doc.fontSize(12).text(met.length ? met.join(", ") : "None");
+      doc.moveDown();
 
-    doc.fontSize(14).text("Met 2 this week");
-    doc.moveDown(0.5);
-    doc.fontSize(12).text(met.length ? met.join(", ") : "None");
-    doc.moveDown();
+      doc.fontSize(14).text("Did not meet 2 this week");
+      doc.moveDown(0.5);
+      doc.fontSize(12).text(notMet.length ? notMet.join(", ") : "None");
 
-    doc.fontSize(14).text("Did not meet 2 this week");
-    doc.moveDown(0.5);
-    doc.fontSize(12).text(notMet.length ? notMet.join(", ") : "None");
-
-    doc.end();
+      doc.end();
+    }
   });
 
-  const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
-
-  return new Response(pdfBlob, {
+  return new Response(stream, {
     headers: {
       "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="gym-report-${weekStart}.pdf"`,
-    },
+      "content-disposition": `attachment; filename="gym-report-${weekStart}.pdf"`
+    }
   });
 }
-
