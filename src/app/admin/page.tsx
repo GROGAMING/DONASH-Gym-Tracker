@@ -12,7 +12,7 @@ export default function AdminHome() {
       ) : (
         <ul>
           <li><Link href="/admin/uploads">View uploads</Link></li>
-          <li><Link href="/admin/report">Weekly PDF report</Link></li>
+          <li><Link href="/admin/report">Weekly report</Link></li>
         </ul>
       )}
     </main>
