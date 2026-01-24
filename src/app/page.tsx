@@ -7,6 +7,7 @@ export default function Home() {
       <ul>
         <li><Link href="/upload">Upload</Link></li>
         <li><Link href="/leaderboard">Leaderboard</Link></li>
+        <li><Link href="/doom-scroll">Doom Scroll</Link></li>
         <li><Link href="/admin">Admin</Link></li>
       </ul>
     </main>
