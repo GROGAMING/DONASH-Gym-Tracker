@@ -48,7 +48,7 @@ export async function GET(req: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      doc.on("data", (chunk: Uint8Array) => controller.enqueue(chunk));
+      doc.on("data", (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
       doc.on("end", () => controller.close());
       doc.on("error", (err: any) => controller.error(err));
 
@@ -59,14 +59,20 @@ export async function GET(req: Request) {
 
       doc.fontSize(14).text("This week leaderboard");
       doc.moveDown(0.5);
-      if (weeklyRows.length === 0) doc.fontSize(12).text("No uploads.");
-      weeklyRows.forEach((r, i) => doc.fontSize(12).text(`${i + 1}. ${r.name}: ${r.count}`));
+      if (weeklyRows.length === 0) {
+        doc.fontSize(12).text("No uploads.");
+      } else {
+        weeklyRows.forEach((r, i) => doc.fontSize(12).text(`${i + 1}. ${r.name}: ${r.count}`));
+      }
       doc.moveDown();
 
       doc.fontSize(14).text("Overall leaderboard");
       doc.moveDown(0.5);
-      if (overallRows.length === 0) doc.fontSize(12).text("No uploads.");
-      overallRows.forEach((r, i) => doc.fontSize(12).text(`${i + 1}. ${r.name}: ${r.count}`));
+      if (overallRows.length === 0) {
+        doc.fontSize(12).text("No uploads.");
+      } else {
+        overallRows.forEach((r, i) => doc.fontSize(12).text(`${i + 1}. ${r.name}: ${r.count}`));
+      }
       doc.moveDown();
 
       doc.fontSize(14).text("Met 2 this week");
@@ -78,6 +84,8 @@ export async function GET(req: Request) {
       doc.moveDown(0.5);
       doc.fontSize(12).text(notMet.length ? notMet.join(", ") : "None");
 
+      // Ensure everything is flushed before ending
+      doc.flush();
       doc.end();
     }
   });
