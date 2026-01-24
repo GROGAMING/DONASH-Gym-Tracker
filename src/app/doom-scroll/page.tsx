@@ -6,7 +6,8 @@ type Item = {
   id: string;
   name: string;
   created_at: string;
-  signedUrl: string | null;
+  image_path: string;
+  signedUrl: string;
 };
 
 export default function DoomScrollPage() {
