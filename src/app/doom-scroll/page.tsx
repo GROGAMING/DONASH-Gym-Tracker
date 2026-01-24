@@ -18,7 +18,7 @@ export default function DoomScrollPage() {
 
   const load = async () => {
     try {
-      const res = await fetch("/api/gallery", { cache: "no-store" });
+      const res = await fetch(`/api/gallery?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) {
         const err = await res.json();
         setStatus(err.error ?? "Failed to load");

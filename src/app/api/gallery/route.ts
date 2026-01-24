@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET() {
@@ -36,13 +39,14 @@ export async function GET() {
     (data ?? []).map(async (row: any) => {
       const { data: signed, error: signErr } = await supabaseAdmin.storage
         .from("gym-photos")
-        .createSignedUrl(row.image_path, 600); // 10 minutes
+        .createSignedUrl(row.image_path, 600);
+      const signedUrl = signed?.signedUrl ?? "";
 
       return {
         id: row.id,
         name: userMap.get(row.user_id) ?? "Unknown",
         created_at: row.created_at,
-        signedUrl: signErr ? null : (signed?.signedUrl ?? null)
+        signedUrl: signErr ? null : signedUrl
       };
     })
   );
@@ -51,7 +55,7 @@ export async function GET() {
     status: 200,
     headers: {
       "content-type": "application/json",
-      "Cache-Control": "no-store, max-age=0",
+      "Cache-Control": "no-store, max-age=0, must-revalidate",
       "Pragma": "no-cache",
       "Expires": "0"
     }
