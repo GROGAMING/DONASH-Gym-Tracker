@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { mondayWeekStartISO } from "@/lib/week";
 
 type User = { id: string; name: string };
 
 export default function UploadPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [userId, setUserId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -20,31 +23,42 @@ export default function UploadPage() {
     })();
   }, []);
 
-  async function onSubmit() {
+  async function onSubmit(selectedFile?: File | null) {
+    if (uploading) return;
+
     setStatus("");
     if (!userId) return setStatus("Select your name.");
-    if (!file) return setStatus("Take a photo.");
 
-    const weekStart = mondayWeekStartISO(new Date());
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-    const path = `${weekStart}/${userId}/${crypto.randomUUID()}.${ext}`;
+    const f = selectedFile ?? file;
+    if (!f) return setStatus("Take a photo.");
 
-    const { error: upErr } = await supabase.storage
-      .from("gym-photos")
-      .upload(path, file, { upsert: false, contentType: file.type });
+    setUploading(true);
+    try {
+      const weekStart = mondayWeekStartISO(new Date());
+      const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${weekStart}/${userId}/${crypto.randomUUID()}.${ext}`;
 
-    if (upErr) return setStatus(upErr.message);
+      const { error: upErr } = await supabase.storage
+        .from("gym-photos")
+        .upload(path, f, { upsert: false, contentType: f.type });
 
-    const { error: insErr } = await supabase.from("uploads").insert({
-      user_id: userId,
-      image_path: path,
-      status: "active"
-    });
+      if (upErr) return setStatus(upErr.message);
 
-    if (insErr) return setStatus(insErr.message);
+      const { error: insErr } = await supabase.from("uploads").insert({
+        user_id: userId,
+        image_path: path,
+        status: "active"
+      });
 
-    setFile(null);
-    setStatus("Uploaded.");
+      if (insErr) return setStatus(insErr.message);
+
+      setFile(null);
+      setStatus("Uploaded.");
+      window.alert("Uploaded! Taking you to the leaderboard.");
+      router.push("/leaderboard");
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -64,15 +78,41 @@ export default function UploadPage() {
       </select>
 
       <label>Photo (camera)</label>
+      <label
+        htmlFor={userId ? "photo" : undefined}
+        onClick={(e: MouseEvent<HTMLLabelElement>) => {
+          if (!userId) {
+            e.preventDefault();
+            setStatus("Select your name.");
+          }
+        }}
+        style={{
+          display: "inline-block",
+          padding: "10px 14px",
+          margin: "8px 0 16px",
+          border: "1px solid #ccc",
+          borderRadius: 4,
+          cursor: uploading || !userId ? "not-allowed" : "pointer",
+          opacity: uploading || !userId ? 0.6 : 1
+        }}
+      >
+        Take photo
+      </label>
       <input
+        id="photo"
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        style={{ display: "block", margin: "8px 0 16px" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0] ?? null;
+          setFile(f);
+          if (f && userId && !uploading) void onSubmit(f);
+        }}
+        style={{ display: "none" }}
+        disabled={uploading}
       />
 
-      <button onClick={onSubmit} style={{ padding: "10px 14px" }}>
+      <button onClick={() => onSubmit()} style={{ padding: "10px 14px" }} disabled={uploading}>
         Upload
       </button>
 
