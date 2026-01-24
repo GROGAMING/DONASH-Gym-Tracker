@@ -3,7 +3,6 @@
 export const dynamic = "force-dynamic";
 
 import { useMemo, useState, useEffect, ChangeEvent } from "react";
-import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 function dublinMondayWeekStartISO(d: Date): string {
@@ -31,10 +30,7 @@ function todayISO() {
 }
 
 export default function AdminReportPage() {
-  const sp = useSearchParams();
-  const [dateInWeek, setDateInWeek] = useState(() => {
-    return sp.get("weekStart") || todayISO();
-  });
+  const [dateInWeek, setDateInWeek] = useState(todayISO());
 
   const weekStart = useMemo(() => dublinMondayWeekStartISO(new Date(dateInWeek)), [dateInWeek]);
 
@@ -61,6 +57,11 @@ export default function AdminReportPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const ws = sp.get("weekStart");
+      if (ws) setDateInWeek(ws);
+    }
     load();
   }, []);
 
