@@ -18,7 +18,7 @@ export default function DoomScrollPage() {
 
   const load = async () => {
     try {
-      const res = await fetch("/api/gallery");
+      const res = await fetch("/api/gallery", { cache: "no-store" });
       if (!res.ok) {
         const err = await res.json();
         setStatus(err.error ?? "Failed to load");
@@ -28,7 +28,7 @@ export default function DoomScrollPage() {
       const newFirstId = data[0]?.id ?? null;
       // Only update if first item changed or length changed
       if (newFirstId !== firstIdRef.current || data.length !== items.length) {
-        setItems(data);
+        setItems(data.slice(0, 100)); // cap at 100
         firstIdRef.current = newFirstId;
       }
       setLastUpdated(new Date().toLocaleTimeString());
