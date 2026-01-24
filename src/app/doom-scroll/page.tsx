@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 type Item = {
   id: string;
@@ -12,27 +12,44 @@ type Item = {
 export default function DoomScrollPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [status, setStatus] = useState("");
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+  const firstIdRef = useRef<string | null>(null);
+
+  const load = async () => {
+    try {
+      const res = await fetch("/api/gallery");
+      if (!res.ok) {
+        const err = await res.json();
+        setStatus(err.error ?? "Failed to load");
+        return;
+      }
+      const data: Item[] = await res.json();
+      const newFirstId = data[0]?.id ?? null;
+      // Only update if first item changed or length changed
+      if (newFirstId !== firstIdRef.current || data.length !== items.length) {
+        setItems(data);
+        firstIdRef.current = newFirstId;
+      }
+      setLastUpdated(new Date().toLocaleTimeString());
+    } catch (e) {
+      setStatus(String(e));
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/gallery");
-        if (!res.ok) {
-          const err = await res.json();
-          setStatus(err.error ?? "Failed to load");
-          return;
-        }
-        const data = await res.json();
-        setItems(data);
-      } catch (e) {
-        setStatus(String(e));
-      }
-    })();
+    load(); // initial load
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
     <main style={{ padding: 20, maxWidth: 720, margin: "0 auto", fontFamily: "system-ui" }}>
       <h2>Doom Scroll</h2>
+      {lastUpdated && (
+        <p style={{ fontSize: "0.8rem", color: "#666", margin: "0 0 16px 0" }}>
+          Last updated: {lastUpdated}
+        </p>
+      )}
       {status && <p style={{ color: "red" }}>{status}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
         {items.map((item) => (
