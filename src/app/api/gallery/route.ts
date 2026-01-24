@@ -16,7 +16,7 @@ export async function GET() {
   }
 
   // Fetch user names
-  const userIds = [...new Set((data ?? []).map((u) => u.user_id))];
+  const userIds = [...new Set((data ?? []).map((u: any) => u.user_id))];
   const { data: users, error: usersErr } = await supabaseAdmin
     .from("users")
     .select("id, name")
@@ -29,12 +29,12 @@ export async function GET() {
     });
   }
 
-  const userMap = new Map((users ?? []).map((u) => [u.id, u.name]));
+  const userMap = new Map((users ?? []).map((u: any) => [u.id, u.name]));
 
   // Generate signed URLs
   const items = await Promise.all(
-    (data ?? []).map(async (row) => {
-      const { signedURL, error: signErr } = await supabaseAdmin.storage
+    (data ?? []).map(async (row: any) => {
+      const { data: signed, error: signErr } = await supabaseAdmin.storage
         .from("gym-photos")
         .createSignedUrl(row.image_path, 600); // 10 minutes
 
@@ -42,7 +42,7 @@ export async function GET() {
         id: row.id,
         name: userMap.get(row.user_id) ?? "Unknown",
         created_at: row.created_at,
-        signedUrl: signErr ? null : signedURL
+        signedUrl: signErr ? null : (signed?.signedUrl ?? null)
       };
     })
   );
