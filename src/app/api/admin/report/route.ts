@@ -48,7 +48,10 @@ export async function GET(req: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      doc.on("data", (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
+      doc.on("data", (chunk: Buffer) => {
+        const u8 = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+        controller.enqueue(u8);
+      });
       doc.on("end", () => controller.close());
       doc.on("error", (err: any) => controller.error(err));
 
@@ -84,8 +87,6 @@ export async function GET(req: Request) {
       doc.moveDown(0.5);
       doc.fontSize(12).text(notMet.length ? notMet.join(", ") : "None");
 
-      // Ensure everything is flushed before ending
-      doc.flush();
       doc.end();
     }
   });
