@@ -23,6 +23,36 @@ export default function UploadPage() {
     })();
   }, []);
 
+  async function compressImage(file: File): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("Canvas context unavailable"));
+
+        const { width, height } = img;
+        const longest = Math.max(width, height);
+        const scale = longest > 1280 ? 1280 / longest : 1;
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return reject(new Error("Compression failed"));
+            const compressed = new File([blob], "capture.jpg", { type: "image/jpeg" });
+            resolve(compressed);
+          },
+          "image/jpeg",
+          0.75
+        );
+      };
+      img.onerror = () => reject(new Error("Image load failed"));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
   async function onSubmit(selectedFile?: File | null) {
     if (uploading) return;
 
@@ -34,13 +64,17 @@ export default function UploadPage() {
 
     setUploading(true);
     try {
+      setStatus("Compressing photo...");
+      const fileToUpload = await compressImage(f).catch(() => f); // fallback to original
+
+      setStatus("Uploading...");
       const weekStart = mondayWeekStartISO(new Date());
-      const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
+      const ext = (fileToUpload.name.split(".").pop() || "jpg").toLowerCase();
       const path = `${weekStart}/${userId}/${crypto.randomUUID()}.${ext}`;
 
       const { error: upErr } = await supabase.storage
         .from("gym-photos")
-        .upload(path, f, { upsert: false, contentType: f.type });
+        .upload(path, fileToUpload, { upsert: false, contentType: fileToUpload.type });
 
       if (upErr) return setStatus(upErr.message);
 
