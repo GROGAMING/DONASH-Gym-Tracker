@@ -11,8 +11,22 @@ export default function LeaderboardPage() {
   const [weekly, setWeekly] = useState<Row[]>([]);
   const [overall, setOverall] = useState<Row[]>([]);
   const [status, setStatus] = useState("");
+  const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        setIsPaused(true);
+      } else {
+        setIsPaused(true); // require manual refresh
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    if (isPaused) return;
     (async () => {
       setStatus("");
 
@@ -25,11 +39,16 @@ export default function LeaderboardPage() {
       setWeekly((w.data ?? []) as Row[]);
       setOverall((o.data ?? []) as Row[]);
     })();
-  }, [weekStart]);
+  }, [weekStart, isPaused]);
 
   return (
     <main style={{ padding: 20, maxWidth: 520, margin: "0 auto", fontFamily: "system-ui" }}>
       <h2>Leaderboards</h2>
+      {isPaused && (
+        <p style={{ color: "orange", fontWeight: "bold", marginBottom: 12 }}>
+          Page paused to save data — refresh to continue
+        </p>
+      )}
 
       <h3>This week (starting {weekStart})</h3>
       <ol>
