@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Item = {
   id: string;
@@ -15,8 +15,22 @@ export default function AdminUploadList({ initialItems }: { initialItems: Item[]
   const [msg, setMsg] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
   const [selected, setSelected] = useState<Item | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        setIsPaused(true);
+      } else {
+        setIsPaused(true); // require manual refresh
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   async function del(id: string) {
+    if (isPaused) return;
     setMsg("");
     const res = await fetch("/api/admin/delete-upload", {
       method: "POST",
@@ -35,6 +49,7 @@ export default function AdminUploadList({ initialItems }: { initialItems: Item[]
   }
 
   async function loadMore() {
+    if (isPaused || loadingMore) return;
     setLoadingMore(true);
     try {
       const lastCreatedAt = items[items.length - 1]?.created_at;
@@ -49,15 +64,22 @@ export default function AdminUploadList({ initialItems }: { initialItems: Item[]
   }
 
   async function refresh() {
+    if (loadingMore) return;
     const res = await fetch("/api/admin/uploads-more?before=");
     if (!res.ok) return;
     const newItems: Item[] = await res.json();
     setItems(newItems);
+    setIsPaused(false);
   }
 
   return (
     <>
-      <button onClick={refresh} style={{ marginBottom: 16, padding: "8px 12px" }}>
+      {isPaused && (
+        <p style={{ color: "orange", fontWeight: "bold", marginBottom: 12 }}>
+          Page paused to save data — press Refresh
+        </p>
+      )}
+      <button onClick={refresh} disabled={loadingMore} style={{ marginBottom: 16, padding: "8px 12px" }}>
         Refresh
       </button>
       {msg && <p>{msg}</p>}
@@ -72,7 +94,7 @@ export default function AdminUploadList({ initialItems }: { initialItems: Item[]
               cursor: "pointer",
               background: "#fafafa"
             }}
-            onClick={() => setSelected(x)}
+            onClick={() => !isPaused && setSelected(x)}
           >
             <img
               src={x.publicUrl}
@@ -90,7 +112,7 @@ export default function AdminUploadList({ initialItems }: { initialItems: Item[]
       {items.length > 0 && items.length % 50 === 0 && (
         <button
           onClick={loadMore}
-          disabled={loadingMore}
+          disabled={loadingMore || isPaused}
           style={{ marginTop: 20, padding: "10px 16px" }}
         >
           {loadingMore ? "Loading..." : "Load more"}
@@ -131,7 +153,7 @@ export default function AdminUploadList({ initialItems }: { initialItems: Item[]
                   {new Date(selected.created_at).toLocaleString()}
                 </span>
               </div>
-              <button onClick={() => del(selected.id)} style={{ padding: "8px 12px" }}>
+              <button onClick={() => !isPaused && del(selected.id)} style={{ padding: "8px 12px" }}>
                 Delete
               </button>
             </div>
