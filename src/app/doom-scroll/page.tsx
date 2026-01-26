@@ -11,38 +11,55 @@ type Item = {
 };
 
 export default function DoomScrollPage() {
-  const [items, setItems] = useState<Item[]>([]);
+  const [itemsById, setItemsById] = useState<Record<string, Item>>({});
+  const [orderedIds, setOrderedIds] = useState<string[]>([]);
   const [status, setStatus] = useState("");
   const [lastUpdated, setLastUpdated] = useState<string>("");
-  const firstIdRef = useRef<string | null>(null);
+  const lastUpdatedRef = useRef<string>("");
 
   const load = async () => {
     try {
-      const res = await fetch(`/api/gallery?t=${Date.now()}`, { cache: "no-store" });
+      const res = await fetch("/api/gallery", { cache: "no-store" });
       if (!res.ok) {
         const err = await res.json();
         setStatus(err.error ?? "Failed to load");
         return;
       }
-      const newItems: Item[] = await res.json();
-      const newFirstId = newItems[0]?.id ?? null;
-      const currentFirstId = items[0]?.id ?? null;
+      const incoming: Item[] = await res.json();
+      const incomingIds = incoming.map((x) => x.id);
+      const currentTop = orderedIds[0];
 
-      if (newFirstId !== currentFirstId) {
-        // Merge: keep existing items by id, prepend truly new ones
-        const existingMap = new Map(items.map((i) => [i.id, i]));
-        const merged: Item[] = [];
-        // Add new items first
-        for (const i of newItems) {
-          if (!existingMap.has(i.id)) merged.push(i);
-        }
-        // Then keep existing items in their current order
-        merged.push(...items);
-        // Trim to 100
-        setItems(merged.slice(0, 100));
-        firstIdRef.current = newFirstId;
+      // If top is same, do nothing
+      if (incomingIds[0] === currentTop) return;
+
+      // Find new items not already in state
+      const newOnes = incoming.filter((x) => !itemsById[x.id]);
+      if (newOnes.length === 0) return;
+
+      // Add new items to map
+      const nextItemsById = { ...itemsById };
+      for (const item of newOnes) {
+        nextItemsById[item.id] = item;
       }
-      setLastUpdated(new Date().toLocaleTimeString());
+
+      // Merge IDs, dedupe while preserving order
+      const nextOrderedIds = [...newOnes.map((x) => x.id), ...orderedIds];
+      const seen = new Set<string>();
+      const deduped: string[] = [];
+      for (const id of nextOrderedIds) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          deduped.push(id);
+        }
+      }
+
+      // Trim to 40
+      const trimmed = deduped.slice(0, 40);
+
+      setItemsById(nextItemsById);
+      setOrderedIds(trimmed);
+      lastUpdatedRef.current = new Date().toLocaleTimeString();
+      setLastUpdated(lastUpdatedRef.current);
     } catch (e) {
       setStatus(String(e));
     }
@@ -50,7 +67,7 @@ export default function DoomScrollPage() {
 
   useEffect(() => {
     load(); // initial load
-    const interval = setInterval(load, 10000); // poll every 10 seconds
+    const interval = setInterval(load, 15000); // poll every 15 seconds
     return () => clearInterval(interval);
   }, []);
 
@@ -64,23 +81,28 @@ export default function DoomScrollPage() {
       )}
       {status && <p style={{ color: "red" }}>{status}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-        {items.map((item) => (
-          <div key={item.id} style={{ borderBottom: "1px solid #eee", paddingBottom: 16 }}>
-            <p style={{ margin: "0 0 8px 0", fontWeight: "bold" }}>{item.name}</p>
-            <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", color: "#666" }}>
-              {new Date(item.created_at).toLocaleString()}
-            </p>
-            {item.signedUrl ? (
-              <img
-                src={item.signedUrl}
-                alt=""
-                style={{ maxWidth: "100%", height: "auto", borderRadius: 4 }}
-              />
-            ) : (
-              <p style={{ color: "#999" }}>Image unavailable</p>
-            )}
-          </div>
-        ))}
+        {orderedIds.map((id) => {
+          const item = itemsById[id];
+          if (!item) return null;
+          return (
+            <div key={id} style={{ borderBottom: "1px solid #eee", paddingBottom: 16 }}>
+              <p style={{ margin: "0 0 8px 0", fontWeight: "bold" }}>{item.name}</p>
+              <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", color: "#666" }}>
+                {new Date(item.created_at).toLocaleString()}
+              </p>
+              {item.signedUrl ? (
+                <img
+                  src={item.signedUrl}
+                  alt=""
+                  loading="lazy"
+                  style={{ maxWidth: "100%", height: "auto", borderRadius: 4 }}
+                />
+              ) : (
+                <p style={{ color: "#999" }}>Image unavailable</p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </main>
   );
