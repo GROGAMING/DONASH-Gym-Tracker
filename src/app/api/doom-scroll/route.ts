@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const before = searchParams.get("before");
-  const limit = before ? 50 : 50; // always 50
+  const limit = before ? 10 : 10; // always 10
 
   let query = supabaseAdmin
     .from("uploads")

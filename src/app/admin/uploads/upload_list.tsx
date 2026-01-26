@@ -48,8 +48,18 @@ export default function AdminUploadList({ initialItems }: { initialItems: Item[]
     }
   }
 
+  async function refresh() {
+    const res = await fetch("/api/admin/uploads-more?before=");
+    if (!res.ok) return;
+    const newItems: Item[] = await res.json();
+    setItems(newItems);
+  }
+
   return (
     <>
+      <button onClick={refresh} style={{ marginBottom: 16, padding: "8px 12px" }}>
+        Refresh
+      </button>
       {msg && <p>{msg}</p>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
         {items.map((x) => (
