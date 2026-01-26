@@ -24,11 +24,22 @@ export default function DoomScrollPage() {
         setStatus(err.error ?? "Failed to load");
         return;
       }
-      const data: Item[] = await res.json();
-      const newFirstId = data[0]?.id ?? null;
-      // Only update if first item changed or length changed
-      if (newFirstId !== firstIdRef.current || data.length !== items.length) {
-        setItems(data.slice(0, 100)); // cap at 100
+      const newItems: Item[] = await res.json();
+      const newFirstId = newItems[0]?.id ?? null;
+      const currentFirstId = items[0]?.id ?? null;
+
+      if (newFirstId !== currentFirstId) {
+        // Merge: keep existing items by id, prepend truly new ones
+        const existingMap = new Map(items.map((i) => [i.id, i]));
+        const merged: Item[] = [];
+        // Add new items first
+        for (const i of newItems) {
+          if (!existingMap.has(i.id)) merged.push(i);
+        }
+        // Then keep existing items in their current order
+        merged.push(...items);
+        // Trim to 100
+        setItems(merged.slice(0, 100));
         firstIdRef.current = newFirstId;
       }
       setLastUpdated(new Date().toLocaleTimeString());
@@ -39,7 +50,7 @@ export default function DoomScrollPage() {
 
   useEffect(() => {
     load(); // initial load
-    const interval = setInterval(load, 2000); // poll every 2 seconds
+    const interval = setInterval(load, 10000); // poll every 10 seconds
     return () => clearInterval(interval);
   }, []);
 
