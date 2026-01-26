@@ -45,23 +45,27 @@ export default function DoomScrollPage() {
       <button onClick={refresh} style={{ marginBottom: 16, padding: "8px 12px" }}>
         Refresh
       </button>
-      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
         {items.map((item) => (
-          <div key={item.id} style={{ borderBottom: "1px solid #eee", paddingBottom: 16 }}>
-            <p style={{ margin: "0 0 8px 0", fontWeight: "bold" }}>{item.name}</p>
-            <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", color: "#666" }}>
+          <div
+            key={item.id}
+            style={{
+              border: "1px solid #ddd",
+              borderRadius: 4,
+              padding: 8,
+              background: "#fafafa"
+            }}
+          >
+            <img
+              src={item.publicUrl}
+              alt=""
+              loading="lazy"
+              style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 2 }}
+            />
+            <p style={{ margin: "8px 0 4px", fontSize: "0.9rem", fontWeight: "bold" }}>{item.name}</p>
+            <p style={{ margin: 0, fontSize: "0.75rem", color: "#666" }}>
               {new Date(item.created_at).toLocaleString()}
             </p>
-            {item.publicUrl ? (
-              <img
-                src={item.publicUrl}
-                alt=""
-                loading="lazy"
-                style={{ maxWidth: "100%", height: "auto", borderRadius: 4 }}
-              />
-            ) : (
-              <p style={{ color: "#999" }}>Image unavailable</p>
-            )}
           </div>
         ))}
       </div>
