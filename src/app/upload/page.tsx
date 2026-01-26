@@ -88,8 +88,8 @@ export default function UploadPage() {
 
       setFile(null);
       setStatus("Uploaded.");
-      window.alert("Uploaded! Taking you to Doom Scroll.");
-      router.push(`/doom-scroll?ts=${Date.now()}`);
+      window.alert("Uploaded! Go to Leaderboard.");
+      router.push("/leaderboard");
     } finally {
       setUploading(false);
     }

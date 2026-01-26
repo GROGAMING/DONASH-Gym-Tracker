@@ -7,7 +7,7 @@ type Item = {
   name: string;
   created_at: string;
   image_path: string;
-  signedUrl: string;
+  publicUrl: string;
 };
 
 export default async function AdminUploadsPage() {
@@ -21,27 +21,24 @@ export default async function AdminUploadsPage() {
     .select("id, created_at, image_path, status, users(name)")
     .eq("status", "active")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(50);
 
   if (error) {
     return <main style={{ padding: 20, fontFamily: "system-ui" }}>{error.message}</main>;
   }
 
-  const items: Item[] = await Promise.all(
-    (data ?? []).map(async (row: any) => {
-      const { data: signed } = await supabaseAdmin.storage
-        .from("gym-photos")
-        .createSignedUrl(row.image_path, 60 * 10);
-
-      return {
-        id: row.id,
-        name: row.users?.name ?? "Unknown",
-        created_at: row.created_at,
-        image_path: row.image_path,
-        signedUrl: signed?.signedUrl ?? ""
-      };
-    })
-  );
+  const items: Item[] = (data ?? []).map((row: any) => {
+    const { data: { publicUrl } } = supabaseAdmin.storage
+      .from("gym-photos")
+      .getPublicUrl(row.image_path);
+    return {
+      id: row.id,
+      name: row.users?.name ?? "Unknown",
+      created_at: row.created_at,
+      image_path: row.image_path,
+      publicUrl
+    };
+  });
 
   return (
     <main style={{ padding: 20, maxWidth: 960, margin: "0 auto", fontFamily: "system-ui" }}>
