@@ -14,28 +14,15 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        setIsPaused(true);
-      } else {
-        setIsPaused(true); // require manual refresh
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
-
-  useEffect(() => {
-    if (isPaused) return;
     (async () => {
       const { data, error } = await supabase.from("users").select("id,name").order("name");
       if (error) setStatus(error.message);
       else setUsers((data ?? []) as User[]);
     })();
-  }, [isPaused]);
+  }, []);
 
   async function compressImage(file: File): Promise<File> {
     return new Promise((resolve, reject) => {
@@ -68,7 +55,7 @@ export default function UploadPage() {
   }
 
   async function onSubmit(selectedFile?: File | null) {
-    if (uploading || isPaused) return;
+    if (uploading) return;
 
     setStatus("");
     if (!userId) return setStatus("Select your name.");
@@ -112,17 +99,12 @@ export default function UploadPage() {
   return (
     <main style={{ padding: 20, maxWidth: 520, margin: "0 auto", fontFamily: "system-ui" }}>
       <h2>Upload</h2>
-      {isPaused && (
-        <p style={{ color: "orange", fontWeight: "bold", marginBottom: 12 }}>
-          Page paused to save data — refresh to continue
-        </p>
-      )}
       <label>Name</label>
       <select
         value={userId}
         onChange={(e) => setUserId(e.target.value)}
         style={{ display: "block", width: "100%", padding: 10, margin: "8px 0 16px" }}
-        disabled={isPaused}
+        disabled={false}
       >
         <option value="">Select</option>
         {users.map((u) => (
@@ -132,11 +114,11 @@ export default function UploadPage() {
 
       <label>Photo (camera)</label>
       <label
-        htmlFor={userId && !isPaused ? "photo" : undefined}
+        htmlFor={userId ? "photo" : undefined}
         onClick={(e: MouseEvent<HTMLLabelElement>) => {
-          if (!userId || isPaused) {
+          if (!userId) {
             e.preventDefault();
-            setStatus(isPaused ? "Page paused. Refresh to continue." : "Select your name.");
+            setStatus("Select your name.");
           }
         }}
         style={{
@@ -145,8 +127,8 @@ export default function UploadPage() {
           margin: "8px 0 16px",
           border: "1px solid #ccc",
           borderRadius: 4,
-          cursor: uploading || !userId || isPaused ? "not-allowed" : "pointer",
-          opacity: uploading || !userId || isPaused ? 0.6 : 1
+          cursor: uploading || !userId ? "not-allowed" : "pointer",
+          opacity: uploading || !userId ? 0.6 : 1
         }}
       >
         Take photo
@@ -159,13 +141,13 @@ export default function UploadPage() {
         onChange={(e) => {
           const f = e.target.files?.[0] ?? null;
           setFile(f);
-          if (f && userId && !uploading && !isPaused) void onSubmit(f);
+          if (f && userId && !uploading) void onSubmit(f);
         }}
         style={{ display: "none" }}
-        disabled={uploading || isPaused}
+        disabled={uploading}
       />
 
-      <button onClick={() => onSubmit()} style={{ padding: "10px 14px" }} disabled={uploading || isPaused}>
+      <button onClick={() => onSubmit()} style={{ padding: "10px 14px" }} disabled={uploading}>
         Upload
       </button>
 
