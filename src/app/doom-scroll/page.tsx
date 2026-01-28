@@ -21,8 +21,9 @@ export default function DoomScrollPage() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         setIsPaused(true);
-      } else {
-        setIsPaused(true); // require manual refresh
+      } else if (document.visibilityState === "visible") {
+        // Don't auto-refresh when tab becomes visible
+        // User must manually press Refresh
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -30,9 +31,9 @@ export default function DoomScrollPage() {
   }, []);
 
   useEffect(() => {
-    if (isPaused) return;
+    // Only load initial data on mount, no auto-refresh
     loadInitial();
-  }, [isPaused]);
+  }, []);
 
   async function loadInitial() {
     setLoading(true);
@@ -52,7 +53,7 @@ export default function DoomScrollPage() {
     try {
       const lastCreatedAt = items[items.length - 1]?.created_at;
       if (!lastCreatedAt) return;
-      const res = await fetch(`/api/doom-scroll?before=${encodeURIComponent(lastCreatedAt)}`);
+      const res = await fetch(`/api/doom-scroll?before=${encodeURIComponent(lastCreatedAt)}&existingCount=${items.length}`);
       if (!res.ok) return;
       const newItems: Item[] = await res.json();
       setItems((prev) => [...prev, ...newItems]);
@@ -110,7 +111,7 @@ export default function DoomScrollPage() {
         ))}
       </div>
       
-      {items.length > 0 && items.length % 10 === 0 && (
+      {items.length > 0 && items.length < 40 && items.length % 10 === 0 && (
         <button
           onClick={loadMore}
           disabled={loadingMore || isPaused}

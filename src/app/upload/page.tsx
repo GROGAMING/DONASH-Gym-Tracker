@@ -34,7 +34,7 @@ export default function UploadPage() {
 
         const { width, height } = img;
         const longest = Math.max(width, height);
-        const scale = longest > 1280 ? 1280 / longest : 1;
+        const scale = longest > 600 ? 600 / longest : 1;
         canvas.width = width * scale;
         canvas.height = height * scale;
 
@@ -46,7 +46,7 @@ export default function UploadPage() {
             resolve(compressed);
           },
           "image/jpeg",
-          0.75
+          0.7
         );
       };
       img.onerror = () => reject(new Error("Image load failed"));
@@ -75,7 +75,11 @@ export default function UploadPage() {
 
       const { error: upErr } = await supabase.storage
         .from("gym-photos")
-        .upload(path, fileToUpload, { upsert: false, contentType: fileToUpload.type });
+        .upload(path, fileToUpload, { 
+          upsert: false, 
+          contentType: fileToUpload.type,
+          cacheControl: 'public, max-age=31536000, immutable'
+        });
 
       if (upErr) return setStatus(upErr.message);
 

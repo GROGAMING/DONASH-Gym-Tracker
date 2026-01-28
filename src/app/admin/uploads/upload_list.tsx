@@ -21,8 +21,9 @@ export default function AdminUploadList({ initialItems }: { initialItems: Item[]
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         setIsPaused(true);
-      } else {
-        setIsPaused(true); // require manual refresh
+      } else if (document.visibilityState === "visible") {
+        // Don't auto-refresh when tab becomes visible
+        // User must manually press Refresh
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);

@@ -4,7 +4,19 @@ import { NextRequest } from "next/server";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const before = searchParams.get("before");
-  const limit = before ? 10 : 10; // always 10
+  const limit = before ? 10 : 10; // always 10, max 40 total
+
+  // For doom-scroll, enforce max 40 items total
+  if (before) {
+    // Check if we already have 30 items (would become 40 with this batch)
+    const existingCount = parseInt(searchParams.get("existingCount") || "0");
+    if (existingCount >= 30) {
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+  }
 
   let query = supabaseAdmin
     .from("uploads")
