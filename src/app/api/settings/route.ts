@@ -1,20 +1,15 @@
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { NextRequest, NextResponse } from "next/server";
+import { getRequiredWeeklySessionsServer, setRequiredWeeklySessionsServer } from "@/lib/settings";
+import { cookies } from "next/headers";
+
+// Helper to check admin authentication
+function isAdmin(): boolean {
+  return cookies().get("admin_authed")?.value === "1";
+}
 
 export async function GET() {
   try {
-    const { data, error } = await supabaseAdmin
-      .from("app_settings")
-      .select("key, value_int, value_text")
-      .eq("key", "required_sessions_weekly")
-      .single();
-
-    if (error && error.code !== 'PGRST116') { // PGRST116 = not found
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Return default value if not found
-    const requiredSessions = data?.value_int || 3;
+    const requiredSessions = await getRequiredWeeklySessionsServer();
 
     return NextResponse.json({ 
       key: "required_sessions_weekly",
@@ -22,12 +17,22 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Error fetching settings:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Failed to fetch settings',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
+    // Check admin authentication
+    if (!isAdmin()) {
+      return NextResponse.json({ 
+        error: 'Unauthorized - admin access required' 
+      }, { status: 401 });
+    }
+
     const { value } = await request.json();
 
     if (typeof value !== 'number' || value < 1 || value > 4) {
@@ -36,27 +41,18 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("app_settings")
-      .upsert({
-        key: "required_sessions_weekly",
-        value_int: value,
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    await setRequiredWeeklySessionsServer(value as 1 | 2 | 3 | 4);
 
     return NextResponse.json({ 
       key: "required_sessions_weekly",
-      value: data.value_int,
-      updated_at: data.updated_at
+      value: value,
+      updated_at: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error updating settings:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Failed to update settings',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }

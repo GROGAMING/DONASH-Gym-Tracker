@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getRequiredWeeklySessions, setRequiredWeeklySessions } from "@/lib/settings";
 
 export default function WeeklyQuotaSettings() {
   const [requiredSessions, setRequiredSessions] = useState(3);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetchSettings();
@@ -14,35 +16,41 @@ export default function WeeklyQuotaSettings() {
 
   async function fetchSettings() {
     try {
-      const res = await fetch("/api/settings");
-      if (!res.ok) throw new Error("Failed to fetch settings");
-      const data = await res.json();
-      setRequiredSessions(data.value);
+      setLoading(true);
+      setError("");
+      setMessage("");
+      
+      const value = await getRequiredWeeklySessions();
+      setRequiredSessions(value);
+      setMessage("");
     } catch (error) {
-      setMessage("Error loading settings");
+      console.error("Error loading settings:", error);
+      setError(`Error loading settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   }
 
   async function saveSettings(value: number) {
+    if (saving) return;
+    
+    const previousValue = requiredSessions;
     setSaving(true);
+    setError("");
     setMessage("");
     
+    // Optimistic UI update
+    setRequiredSessions(value);
+    
     try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value })
-      });
-
-      if (!res.ok) throw new Error("Failed to save settings");
-      
-      setRequiredSessions(value);
+      await setRequiredWeeklySessions(value as 1 | 2 | 3 | 4);
       setMessage("Settings saved successfully!");
       setTimeout(() => setMessage(""), 3000);
     } catch (error) {
-      setMessage("Error saving settings");
+      console.error("Error saving settings:", error);
+      setError(`Error saving settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Revert on failure
+      setRequiredSessions(previousValue);
     } finally {
       setSaving(false);
     }
@@ -72,39 +80,50 @@ export default function WeeklyQuotaSettings() {
           Required sessions this week:
         </label>
         
-        <div style={{ display: "flex", gap: "8px" }}>
-          {[1, 2, 3, 4].map((value) => (
-            <button
-              key={value}
-              onClick={() => saveSettings(value)}
-              disabled={saving || requiredSessions === value}
-              style={{
-                flex: 1,
-                padding: "12px",
-                border: `2px solid ${requiredSessions === value ? "#007bff" : "#ddd"}`,
-                borderRadius: "6px",
-                backgroundColor: requiredSessions === value ? "#007bff" : "#fff",
-                color: requiredSessions === value ? "#fff" : "#333",
-                cursor: saving || requiredSessions === value ? "not-allowed" : "pointer",
-                fontSize: "16px",
-                fontWeight: "bold"
-              }}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
+        <select
+          value={requiredSessions}
+          onChange={(e) => saveSettings(Number(e.target.value))}
+          disabled={loading || saving}
+          style={{
+            width: "100%",
+            padding: "10px",
+            border: "1px solid #ddd",
+            borderRadius: "6px",
+            backgroundColor: loading || saving ? "#f5f5f5" : "#fff",
+            fontSize: "16px",
+            cursor: loading || saving ? "not-allowed" : "pointer"
+          }}
+        >
+          <option value={1}>1</option>
+          <option value={2}>2</option>
+          <option value={3}>3</option>
+          <option value={4}>4</option>
+        </select>
       </div>
 
       {message && (
         <div style={{
           padding: "8px 12px",
           borderRadius: "4px",
-          backgroundColor: message.includes("Error") ? "#f8d7da" : "#d4edda",
-          color: message.includes("Error") ? "#721c24" : "#155724",
-          fontSize: "14px"
+          backgroundColor: "#d4edda",
+          color: "#155724",
+          fontSize: "14px",
+          marginBottom: "8px"
         }}>
-          {message}
+          ✅ {message}
+        </div>
+      )}
+
+      {error && (
+        <div style={{
+          padding: "8px 12px",
+          borderRadius: "4px",
+          backgroundColor: "#f8d7da",
+          color: "#721c24",
+          fontSize: "14px",
+          marginBottom: "8px"
+        }}>
+          ❌ {error}
         </div>
       )}
 
