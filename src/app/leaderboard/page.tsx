@@ -4,11 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { mondayWeekStartISO } from "@/lib/week";
 import MetQuotaTick from "@/components/MetQuotaTick";
-import QuotaDisplay from "@/components/QuotaDisplay";
-import { getWeeklyRequiredSessions } from "@/lib/weeklyQuotaSimple";
 
 type Row = { name: string; count: number; };
-type QuotaUser = { id: string; name: string; weeklySessionCount: number; };
 
 export default function LeaderboardPage() {
   const weekStart = useMemo(() => mondayWeekStartISO(new Date()), []);
