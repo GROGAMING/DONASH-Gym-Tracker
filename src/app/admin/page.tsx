@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import WeeklyQuotaSettings from "@/components/WeeklyQuotaSettings";
+import WeeklyQuotaSettings from "@/components/WeeklyQuotaSettingsSafe";
 
 export default function AdminHome() {
   const authed = cookies().get("admin_authed")?.value === "1";
