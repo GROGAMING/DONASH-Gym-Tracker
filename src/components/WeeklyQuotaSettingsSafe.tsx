@@ -31,7 +31,33 @@ export default function WeeklyQuotaSettings() {
       setMessage("");
     } catch (error) {
       console.error("Error loading settings:", error);
-      setError(`Error loading settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      let errorMessage = "Error loading settings";
+      let statusCode = "Unknown";
+      let responseText = "";
+      
+      if (error instanceof Response) {
+        statusCode = error.status.toString();
+        try {
+          const errorData = await error.json();
+          responseText = JSON.stringify(errorData);
+          errorMessage = `Error ${error.status}: ${errorData.error || errorData.message || 'Unknown error'}`;
+        } catch {
+          responseText = await error.text();
+          errorMessage = `Error ${error.status}: ${responseText || 'HTTP error'}`;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = `Error: ${error.message}`;
+        responseText = error.stack || "";
+      }
+      
+      console.error("Load failed details:", {
+        status: statusCode,
+        response: responseText,
+        error: error
+      });
+      
+      setError(errorMessage);
       // Set fallback value
       setRequiredSessions(3);
     } finally {
@@ -63,10 +89,37 @@ export default function WeeklyQuotaSettings() {
       }
       
       setMessage("Settings saved successfully!");
+      setError(""); // Clear any previous errors
       setTimeout(() => setMessage(""), 3000);
     } catch (error) {
       console.error("Error saving settings:", error);
-      setError(`Error saving settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      let errorMessage = "Error saving settings";
+      let statusCode = "Unknown";
+      let responseText = "";
+      
+      if (error instanceof Response) {
+        statusCode = error.status.toString();
+        try {
+          const errorData = await error.json();
+          responseText = JSON.stringify(errorData);
+          errorMessage = `Error ${error.status}: ${errorData.error || errorData.message || 'Unknown error'}`;
+        } catch {
+          responseText = await error.text();
+          errorMessage = `Error ${error.status}: ${responseText || 'HTTP error'}`;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = `Error: ${error.message}`;
+        responseText = error.stack || "";
+      }
+      
+      console.error("Save failed details:", {
+        status: statusCode,
+        response: responseText,
+        error: error
+      });
+      
+      setError(errorMessage);
       // Revert on failure
       setRequiredSessions(previousValue);
     } finally {

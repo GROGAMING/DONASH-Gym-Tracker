@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { getRequiredWeeklySessions } from "@/lib/weeklyQuotaServer";
 import { cookies } from "next/headers";
 
 // Helper to check admin authentication
@@ -7,15 +7,20 @@ function isAdmin(): boolean {
   return cookies().get("admin_authed")?.value === "1";
 }
 
-// Create server-side Supabase client with RLS
+// Create server-side Supabase client with RLS using cookies
 function createServerClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       auth: {
         autoRefreshToken: false,
         persistSession: false
+      },
+      global: {
+        headers: {
+          cookie: cookies().toString()
+        }
       }
     }
   );
@@ -26,59 +31,19 @@ export async function GET() {
     // Check admin authentication
     if (!isAdmin()) {
       return NextResponse.json({ 
-        error: 'Unauthorized - admin access required' 
+        error: 'Unauthorized - admin access required',
+        code: 'UNAUTHORIZED'
       }, { status: 401 });
     }
 
-    const supabase = createServerClient();
-    
-    const { data, error } = await supabase
-      .from("app_settings")
-      .select("value_int")
-      .eq("key", "required_sessions_weekly")
-      .single();
+    const requiredSessions = await getRequiredWeeklySessions();
 
-    if (error) {
-      console.error("Error fetching weekly quota setting:", {
-        message: error.message,
-        code: error.code,
-        details: error.details
-      });
-      
-      // If row doesn't exist, create it with default value
-      if (error.code === 'PGRST116') {
-        const { data: newData, error: insertError } = await supabase
-          .from("app_settings")
-          .upsert({
-            key: "required_sessions_weekly",
-            value_int: 3,
-            updated_at: new Date().toISOString()
-          })
-          .select("value_int")
-          .single();
-
-        if (insertError) {
-          console.error("Error creating default setting:", insertError);
-          return NextResponse.json({ 
-            error: 'Failed to create default setting',
-            details: insertError.message 
-          }, { status: 500 });
-        }
-
-        return NextResponse.json({ required: newData.value_int });
-      }
-      
-      return NextResponse.json({ 
-        error: 'Failed to fetch setting',
-        details: error.message 
-      }, { status: 500 });
-    }
-
-    return NextResponse.json({ required: data.value_int });
+    return NextResponse.json({ required: requiredSessions });
   } catch (error) {
     console.error('Server error in weekly quota GET:', error);
     return NextResponse.json({ 
       error: 'Internal server error',
+      code: 'INTERNAL_ERROR',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
@@ -89,7 +54,8 @@ export async function PUT(request: NextRequest) {
     // Check admin authentication
     if (!isAdmin()) {
       return NextResponse.json({ 
-        error: 'Unauthorized - admin access required' 
+        error: 'Unauthorized - admin access required',
+        code: 'UNAUTHORIZED'
       }, { status: 401 });
     }
 
@@ -99,13 +65,15 @@ export async function PUT(request: NextRequest) {
     // Validate input
     if (typeof required !== 'number' || required < 1 || required > 4) {
       return NextResponse.json({ 
-        error: 'Required sessions must be between 1 and 4' 
+        error: 'Required sessions must be between 1 and 4',
+        code: 'INVALID_INPUT'
       }, { status: 400 });
     }
 
-    const supabase = createServerClient();
+    // Update using the centralized function
+    const { supabaseAdmin } = await import("@/lib/supabaseAdmin");
     
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("app_settings")
       .upsert({
         key: "required_sessions_weekly",
@@ -123,8 +91,9 @@ export async function PUT(request: NextRequest) {
       });
       
       return NextResponse.json({ 
-        error: 'Failed to update setting',
-        details: error.message 
+        error: error.message || 'Failed to update setting',
+        code: error.code || 'UNKNOWN',
+        details: error.details || null
       }, { status: 500 });
     }
 
@@ -138,6 +107,7 @@ export async function PUT(request: NextRequest) {
     console.error('Server error in weekly quota PUT:', error);
     return NextResponse.json({ 
       error: 'Internal server error',
+      code: 'INTERNAL_ERROR',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
