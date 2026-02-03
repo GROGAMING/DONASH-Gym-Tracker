@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/lib/database.types"; // adjust if your types live elsewhere
+import type { CookieOptions } from "@supabase/ssr";
 
 const KEY = "required_sessions_weekly";
 
@@ -20,7 +21,7 @@ function supabaseServer() {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options?: CookieOptions }[]) {
           // Route handlers can set cookies; this keeps auth sessions working
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
