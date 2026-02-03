@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import type { Database } from "@/lib/database.types"; // adjust if your types live elsewhere
 import type { CookieOptions } from "@supabase/ssr";
 
 const KEY = "required_sessions_weekly";
@@ -13,7 +12,7 @@ function asRequired(n: unknown): 1 | 2 | 3 | 4 | null {
 function supabaseServer() {
   const cookieStore = cookies();
 
-  return createServerClient<Database>(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -39,7 +38,7 @@ export async function GET() {
     .from("app_settings")
     .select("value_int")
     .eq("key", KEY)
-    .maybeSingle();
+    .maybeSingle<{ value_int: number }>();
 
   if (error) {
     return NextResponse.json(
