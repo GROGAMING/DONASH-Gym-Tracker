@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { mondayWeekStartISO } from "@/lib/week";
 import MetQuotaTick from "@/components/MetQuotaTick";
 
-type Row = { name: string; count: number; };
+type Row = { name: string; count: number };
 
 export default function LeaderboardPage() {
   const weekStart = useMemo(() => mondayWeekStartISO(new Date()), []);
@@ -50,7 +50,7 @@ export default function LeaderboardPage() {
         ))}
       </ol>
 
-      {status && <p>{status}</p>
+      {status && <p>{status}</p>}
     </main>
   );
 }
