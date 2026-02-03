@@ -1,36 +1,60 @@
-import { getUsersWithQuotaStatus, getRequiredWeeklySessions, getCurrentWeekRange } from "@/lib/weeklyQuotaServer";
 import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { mondayWeekStartISO } from "@/lib/week";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const includeMetOnly = searchParams.get("metOnly") === "true";
 
-    // Get users with their quota status
-    const users = await getUsersWithQuotaStatus();
+    // Get current week start
+    const weekStart = mondayWeekStartISO(new Date());
     
-    // Get the actual required sessions value
-    const requiredSessions = await getRequiredWeeklySessions();
-    
-    // Get current week range
-    const weekRange = getCurrentWeekRange();
-    
-    // Filter by met quota if requested
-    const filteredUsers = includeMetOnly 
-      ? users.filter(user => user.metQuota)
-      : users;
+    // Get all users
+    const { data: users, error: usersError } = await supabaseAdmin
+      .from("users")
+      .select("id, name");
+
+    if (usersError) {
+      return NextResponse.json({ error: usersError.message }, { status: 500 });
+    }
+
+    // Get weekly session counts for each user
+    const usersWithSessions = await Promise.all(
+      users.map(async (user) => {
+        const { count, error: countError } = await supabaseAdmin
+          .from("uploads")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .gte("created_at", weekStart + "T00:00:00.000Z")
+          .lt("created_at", weekStart + "T23:59:59.999Z");
+
+        if (countError) {
+          console.error(`Error counting sessions for user ${user.id}:`, countError);
+          return null;
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          weeklySessionCount: count || 0
+        };
+      })
+    );
+
+    // Filter out null results
+    const validUsers = usersWithSessions.filter(user => user !== null);
     
     // Sort by name
-    filteredUsers.sort((a, b) => a.name.localeCompare(b.name));
-
-    const metCount = users.filter(u => u.metQuota).length;
+    validUsers.sort((a, b) => a.name.localeCompare(b.name));
 
     return NextResponse.json({
-      users: filteredUsers,
-      requiredSessions,
-      weekStart: weekRange.start,
-      totalUsers: users.length,
-      metCount
+      users: validUsers,
+      requiredSessions: 3, // Default value - will be overridden by client-side localStorage
+      weekStart,
+      totalUsers: validUsers.length,
+      metCount: validUsers.filter(u => u.weeklySessionCount >= 3).length
     });
   } catch (error) {
     console.error('Error fetching weekly quota data:', error);
