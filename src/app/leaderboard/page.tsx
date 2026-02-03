@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { mondayWeekStartISO } from "@/lib/week";
 import QuotaDisplay from "@/components/QuotaDisplay";
+import { getWeeklyRequiredSessions } from "@/lib/weeklyQuotaSimple";
 
 type Row = { name: string; count: number; weeklySessionCount: number };
 type QuotaUser = { id: string; name: string; weeklySessionCount: number; };
@@ -46,7 +47,9 @@ export default function LeaderboardPage() {
   const getMetQuota = (userName: string): boolean => {
     if (!quotaUsers) return false;
     const user = quotaUsers.find(u => u.name === userName);
-    return user?.weeklySessionCount >= 3; // Default to 3 if not available
+    const count = user?.weeklySessionCount ?? 0;
+    const required = getWeeklyRequiredSessions();
+    return count >= required;
   };
 
   return (
@@ -54,14 +57,22 @@ export default function LeaderboardPage() {
       <h2>Leaderboards</h2>
 
       <QuotaDisplay 
-        users={quotaUsers.map(u => ({ ...u, metQuota: getMetQuota(u.name) }))}
+        users={quotaUsers.map(u => ({ 
+          ...u, 
+          weeklySessionCount: u.weeklySessionCount ?? 0,
+          metQuota: getMetQuota(u.name) 
+        }))}
         weekStart={weekStart}
         showMetOnly={true}
       />
 
       <h3>This week (starting {weekStart})</h3>
       <QuotaDisplay 
-        users={quotaUsers.map(u => ({ ...u, metQuota: getMetQuota(u.name) }))}
+        users={quotaUsers.map(u => ({ 
+          ...u, 
+          weeklySessionCount: u.weeklySessionCount ?? 0,
+          metQuota: getMetQuota(u.name) 
+        }))}
         weekStart={weekStart}
         showMetOnly={false}
       />
