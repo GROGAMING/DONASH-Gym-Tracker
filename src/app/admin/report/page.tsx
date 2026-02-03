@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useMemo, useState, useEffect, ChangeEvent } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import ReportQuota from "@/components/ReportQuota";
 
 function dublinMondayWeekStartISO(d: Date): string {
   const parts = new Intl.DateTimeFormat("en", {
@@ -121,11 +122,7 @@ export default function AdminReportPage() {
           )}
         </ol>
 
-        <h3>Met 2 this week</h3>
-        <p>{met.length ? met.join(", ") : "None"}</p>
-
-        <h3>Did not meet 2 this week</h3>
-        <p>{notMet.length ? notMet.join(", ") : "None"}</p>
+        <ReportQuota weekly={weekly} overall={overall} users={users} />
       </div>
 
       <style jsx>{`
