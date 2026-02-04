@@ -52,9 +52,28 @@ export default function AdminReportPage() {
     if (o.error) return setStatus(o.error.message);
     if (u.error) return setStatus(u.error.message);
 
-    setWeekly((w.data ?? []) as { name: string; count: number }[]);
-    setOverall((o.data ?? []) as { name: string; count: number }[]);
-    setUsers((u.data ?? []) as { name: string }[]);
+    const weeklyData = (w.data ?? []) as { name: string; count: number }[];
+    const overallData = (o.data ?? []) as { name: string; count: number }[];
+    const allUsers = (u.data ?? []) as { name: string }[];
+    
+    setUsers(allUsers);
+    
+    // Merge weekly data with all users (show 0 for users with no sessions)
+    const weeklyMap = new Map(weeklyData.map(r => [r.name, r.count]));
+    const weeklyWithAll = allUsers.map(user => ({
+      name: user.name,
+      count: weeklyMap.get(user.name) ?? 0
+    })).sort((a, b) => b.count - a.count);
+    
+    // Merge overall data with all users (show 0 for users with no sessions)
+    const overallMap = new Map(overallData.map(r => [r.name, r.count]));
+    const overallWithAll = allUsers.map(user => ({
+      name: user.name,
+      count: overallMap.get(user.name) ?? 0
+    })).sort((a, b) => b.count - a.count);
+    
+    setWeekly(weeklyWithAll);
+    setOverall(overallWithAll);
   };
 
   useEffect(() => {
@@ -104,10 +123,12 @@ export default function AdminReportPage() {
       {status && <p style={{ color: "red" }}>{status}</p>}
 
       <div style={{ marginTop: 24 }}>
+        <ReportQuota weekly={weekly} overall={overall} users={users} />
+
         <h3>This week leaderboard</h3>
         <ol>
           {weekly.length === 0 ? (
-            <li>No uploads.</li>
+            <li>No users found.</li>
           ) : (
             weekly.map((r: { name: string; count: number }) => <li key={r.name}>{r.name}: {r.count}</li>)
           )}
@@ -116,13 +137,11 @@ export default function AdminReportPage() {
         <h3>Overall leaderboard</h3>
         <ol>
           {overall.length === 0 ? (
-            <li>No uploads.</li>
+            <li>No users found.</li>
           ) : (
             overall.map((r: { name: string; count: number }) => <li key={r.name}>{r.name}: {r.count}</li>)
           )}
         </ol>
-
-        <ReportQuota weekly={weekly} overall={overall} users={users} />
       </div>
 
       <style jsx>{`
