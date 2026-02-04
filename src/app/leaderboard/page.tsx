@@ -11,6 +11,7 @@ export default function LeaderboardPage() {
   const weekStart = useMemo(() => mondayWeekStartISO(new Date()), []);
   const [weekly, setWeekly] = useState<Row[]>([]);
   const [overall, setOverall] = useState<Row[]>([]);
+  const [users, setUsers] = useState<{ name: string }[]>([]);
   const [status, setStatus] = useState("");
 
 
@@ -18,14 +19,38 @@ export default function LeaderboardPage() {
     (async () => {
       setStatus("");
 
-      const w = await supabase.rpc("get_leaderboard_week", { p_week_start: weekStart });
-      const o = await supabase.rpc("get_leaderboard_overall");
+      const [w, o, u] = await Promise.all([
+        supabase.rpc("get_leaderboard_week", { p_week_start: weekStart }),
+        supabase.rpc("get_leaderboard_overall"),
+        supabase.from("users").select("name").order("name")
+      ]);
 
       if (w.error) return setStatus(w.error.message);
       if (o.error) return setStatus(o.error.message);
+      if (u.error) return setStatus(u.error.message);
 
-      setWeekly((w.data ?? []) as Row[]);
-      setOverall((o.data ?? []) as Row[]);
+      const weeklyData = (w.data ?? []) as Row[];
+      const overallData = (o.data ?? []) as Row[];
+      const allUsers = (u.data ?? []) as { name: string }[];
+      
+      setUsers(allUsers);
+      
+      // Merge weekly data with all users (show 0 for users with no sessions)
+      const weeklyMap = new Map(weeklyData.map(r => [r.name, r.count]));
+      const weeklyWithAll = allUsers.map(user => ({
+        name: user.name,
+        count: weeklyMap.get(user.name) ?? 0
+      })).sort((a, b) => b.count - a.count);
+      
+      // Merge overall data with all users (show 0 for users with no sessions)
+      const overallMap = new Map(overallData.map(r => [r.name, r.count]));
+      const overallWithAll = allUsers.map(user => ({
+        name: user.name,
+        count: overallMap.get(user.name) ?? 0
+      })).sort((a, b) => b.count - a.count);
+      
+      setWeekly(weeklyWithAll);
+      setOverall(overallWithAll);
     })();
   }, [weekStart]);
 
