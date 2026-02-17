@@ -14,24 +14,27 @@ export default function LeaderboardPage() {
   const [users, setUsers] = useState<{ name: string }[]>([]);
   const [status, setStatus] = useState("");
 
-
   useEffect(() => {
     (async () => {
       setStatus("");
 
-      const [w, o, u] = await Promise.all([
+      const [w, o, playersRes] = await Promise.all([
         supabase.rpc("get_leaderboard_week", { p_week_start: weekStart }),
         supabase.rpc("get_leaderboard_overall"),
-        supabase.from("users").select("name").order("name")
+        fetch("/api/players")
       ]);
 
       if (w.error) return setStatus(w.error.message);
       if (o.error) return setStatus(o.error.message);
-      if (u.error) return setStatus(u.error.message);
+      if (!playersRes.ok) {
+        const body = (await playersRes.json().catch(() => null)) as { error?: string } | null;
+        return setStatus(body?.error || "Failed to load players.");
+      }
 
       const weeklyData = (w.data ?? []) as Row[];
       const overallData = (o.data ?? []) as Row[];
-      const allUsers = (u.data ?? []) as { name: string }[];
+      const players = (await playersRes.json()) as Array<{ id: string; name: string }>;
+      const allUsers = players.map((p) => ({ name: p.name }));
       
       setUsers(allUsers);
       

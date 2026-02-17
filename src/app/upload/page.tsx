@@ -18,9 +18,18 @@ export default function UploadPage() {
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.from("users").select("id,name").order("name");
-      if (error) setStatus(error.message);
-      else setUsers((data ?? []) as User[]);
+      try {
+        const res = await fetch("/api/players");
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          setStatus(body?.error || "Failed to load players.");
+          return;
+        }
+        const players = (await res.json()) as User[];
+        setUsers(players);
+      } catch {
+        setStatus("Failed to load players.");
+      }
     })();
   }, []);
 

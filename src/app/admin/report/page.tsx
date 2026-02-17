@@ -42,19 +42,21 @@ export default function AdminReportPage() {
 
   const load = async () => {
     setStatus("");
-    const [w, o, u] = await Promise.all([
+    const [w, o, playersRes] = await Promise.all([
       supabase.rpc("get_leaderboard_week", { p_week_start: weekStart }),
       supabase.rpc("get_leaderboard_overall"),
-      supabase.from("users").select("name").order("name")
+      fetch("/api/players")
     ]);
 
     if (w.error) return setStatus(w.error.message);
     if (o.error) return setStatus(o.error.message);
-    if (u.error) return setStatus(u.error.message);
+    if (!playersRes.ok) return setStatus("Failed to load players.");
+
+    const players = (await playersRes.json()) as Array<{ id: string; name: string }>;
 
     const weeklyData = (w.data ?? []) as { name: string; count: number }[];
     const overallData = (o.data ?? []) as { name: string; count: number }[];
-    const allUsers = (u.data ?? []) as { name: string }[];
+    const allUsers = players.map((p) => ({ name: p.name }));
     
     setUsers(allUsers);
     
