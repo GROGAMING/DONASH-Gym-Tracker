@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import AdminUploadList from "./upload_list";
+import { TEAM_ID } from "@/lib/team";
 
 type Item = {
   id: string;
@@ -20,6 +21,7 @@ export default async function AdminUploadsPage() {
     .from("uploads")
     .select("id, created_at, image_path, status, users(name)")
     .eq("status", "active")
+    .eq("team_id", TEAM_ID)
     .order("created_at", { ascending: false })
     .limit(50);
 

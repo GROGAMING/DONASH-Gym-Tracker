@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { NextRequest } from "next/server";
+import { TEAM_ID } from "@/lib/team";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
     .from("uploads")
     .select("id, created_at, image_path, status, users(name)")
     .eq("status", "active")
+    .eq("team_id", TEAM_ID)
     .order("created_at", { ascending: false })
     .limit(limit);
 
