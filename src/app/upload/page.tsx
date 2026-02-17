@@ -78,27 +78,19 @@ export default function UploadPage() {
       const fileToUpload = await compressImage(f).catch(() => f); // fallback to original
 
       setStatus("Uploading...");
-      const weekStart = mondayWeekStartISO(new Date());
-      const ext = (fileToUpload.name.split(".").pop() || "jpg").toLowerCase();
-      const path = `${weekStart}/${userId}/${crypto.randomUUID()}.${ext}`;
+      const formData = new FormData();
+      formData.set("userId", userId);
+      formData.set("file", fileToUpload);
 
-      const { error: upErr } = await supabase.storage
-        .from("gym-photos")
-        .upload(path, fileToUpload, { 
-          upsert: false, 
-          contentType: fileToUpload.type,
-          cacheControl: 'public, max-age=31536000, immutable'
-        });
-
-      if (upErr) return setStatus(upErr.message);
-
-      const { error: insErr } = await supabase.from("uploads").insert({
-        user_id: userId,
-        image_path: path,
-        status: "active"
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
       });
 
-      if (insErr) return setStatus(insErr.message);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        return setStatus(body?.error || "Upload failed.");
+      }
 
       setFile(null);
       setStatus("Uploaded.");
