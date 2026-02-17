@@ -7,6 +7,7 @@ type Item = {
   name: string;
   created_at: string;
   image_path: string;
+  url?: string | null;
   publicUrl: string;
 };
 
@@ -98,7 +99,7 @@ export default function DoomScrollPage() {
             onClick={() => !isPaused && setSelected(x)}
           >
             <img
-              src={x.publicUrl}
+              src={x.url || x.publicUrl}
               alt=""
               loading="lazy"
               style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 2 }}
@@ -156,7 +157,7 @@ export default function DoomScrollPage() {
               </span>
             </div>
             <img
-              src={selected.publicUrl}
+              src={selected.url || selected.publicUrl}
               alt=""
               style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 4 }}
             />
