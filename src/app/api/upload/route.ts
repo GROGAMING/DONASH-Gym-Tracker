@@ -1,10 +1,8 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { TEAM_ID } from "@/lib/team";
-import { mondayWeekStartISO } from "@/lib/week";
 
 export async function POST(req: Request) {
   const formData = await req.formData();
@@ -20,18 +18,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing file" }, { status: 400 });
   }
 
-  const weekStart = mondayWeekStartISO(new Date());
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-
-  const originalPathOrFilename = `${weekStart}/${userId}/${randomUUID()}.${ext}`;
-  const imagePath = `${TEAM_ID}/${originalPathOrFilename}`;
+  const originalFilename = file.name || "upload";
+  const objectPath = `${TEAM_ID}/${Date.now()}-${originalFilename}`;
 
   const arrayBuffer = await file.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
 
   const { error: upErr } = await supabaseAdmin.storage
     .from("gym-photos")
-    .upload(imagePath, bytes, {
+    .upload(objectPath, bytes, {
       upsert: false,
       contentType: file.type || "application/octet-stream",
       cacheControl: "public, max-age=31536000, immutable",
@@ -43,7 +38,7 @@ export async function POST(req: Request) {
 
   const { error: insErr } = await supabaseAdmin.from("uploads").insert({
     user_id: userId,
-    image_path: imagePath,
+    image_path: objectPath,
     status: "active",
     team_id: TEAM_ID,
   });
