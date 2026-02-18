@@ -4,173 +4,192 @@ html, body {
 }
 
 :root {
-  --bg-color: #f8f9fa;
-  --primary: #007bff;
+  --bg-color: #121212;
+  --surface: #1e1e1e;
+  --surface-hover: #2a2a2a;
+  --text: #ffffff;
+  --text-muted: #b3b3b3;
+  --primary: #00d4aa;
+  --primary-hover: #00b894;
   --secondary: #6c757d;
-  --destructive: #dc3545;
-  --success: #28a745;
-  --warning: #ffc107;
-  --info: #17a2b8;
-  --text: #212529;
-  --text-muted: #6c757d;
-  --border: #dee2e6;
-  --border-light: #f1f3f4;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
-  --radius: 8px;
-  --radius-sm: 4px;
+  --secondary-hover: #5a6268;
+  --destructive: #ff6b6b;
+  --destructive-hover: #ff5252;
+  --success: #51cf66;
+  --warning: #ffd43b;
+  --info: #74c0fc;
+  --border: #333333;
+  --border-light: #404040;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --radius: 12px;
+  --radius-sm: 6px;
 }
 
 body {
   background-color: var(--bg-color);
   color: var(--text);
   font-family: system-ui, -apple-system, sans-serif;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 /* Buttons */
 .btn {
   display: inline-block;
-  padding: 8px 16px;
+  padding: 12px 24px;
   border: none;
   border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   text-decoration: none;
   text-align: center;
+  box-shadow: var(--shadow);
 }
 
 .btn-primary {
-  background-color: var(--primary);
-  color: white;
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  color: var(--bg-color);
 }
 
 .btn-primary:hover {
-  background-color: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .btn-primary:focus {
-  outline: 2px solid var(--primary);
+  outline: 3px solid var(--primary);
   outline-offset: 2px;
 }
 
 .btn-secondary {
-  background-color: var(--secondary);
-  color: white;
+  background: transparent;
+  color: var(--text);
+  border: 2px solid var(--secondary);
 }
 
 .btn-secondary:hover {
-  background-color: #545b62;
+  background: var(--secondary);
+  color: var(--bg-color);
+  transform: translateY(-2px);
 }
 
 .btn-secondary:focus {
-  outline: 2px solid var(--secondary);
+  outline: 3px solid var(--secondary);
   outline-offset: 2px;
 }
 
 .btn-destructive {
-  background-color: var(--destructive);
-  color: white;
+  background: linear-gradient(135deg, var(--destructive), var(--destructive-hover));
+  color: var(--bg-color);
 }
 
 .btn-destructive:hover {
-  background-color: #c82333;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .btn-destructive:focus {
-  outline: 2px solid var(--destructive);
+  outline: 3px solid var(--destructive);
   outline-offset: 2px;
 }
 
 /* Inputs */
 .input {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+  padding: 12px 16px;
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  background-color: white;
+  background-color: var(--surface);
+  color: var(--text);
   font-size: 16px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .input:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.2);
 }
 
 .input:disabled {
-  background-color: var(--border-light);
+  background-color: var(--border);
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* Cards */
 .card {
-  background-color: white;
+  background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 20px;
+  padding: 24px;
 }
 
 .card-title {
-  margin: 0 0 16px 0;
-  font-size: 18px;
-  font-weight: 600;
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
 }
 
 /* Messages */
 .message {
-  padding: 8px 12px;
+  padding: 12px 16px;
   border-radius: var(--radius-sm);
-  font-size: 14px;
-  margin-bottom: 8px;
+  font-size: 16px;
+  margin-bottom: 12px;
+  font-weight: 500;
 }
 
 .message-success {
-  background-color: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
+  background-color: rgba(81, 207, 102, 0.1);
+  color: var(--success);
+  border: 1px solid var(--success);
 }
 
 .message-error {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+  background-color: rgba(255, 107, 107, 0.1);
+  color: var(--destructive);
+  border: 1px solid var(--destructive);
 }
 
 .message-info {
-  background-color: #d1ecf1;
-  color: #0c5460;
-  border: 1px solid #bee5eb;
+  background-color: rgba(116, 192, 252, 0.1);
+  color: var(--info);
+  border: 1px solid var(--info);
 }
 
 /* Main container */
 .main {
-  padding: 20px;
-  max-width: 640px;
+  padding: 32px;
+  max-width: 720px;
   margin: 0 auto;
+  background: transparent;
 }
 
 /* Menu styles */
 .menu-button {
-  background: white;
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  padding: 6px 10px;
+  padding: 12px 16px;
   cursor: pointer;
-  font-size: 16px;
-  transition: all 0.2s ease;
+  font-size: 18px;
+  transition: all 0.3s ease;
+  color: var(--text);
+  box-shadow: var(--shadow);
 }
 
 .menu-button:hover {
-  background-color: var(--border-light);
+  background-color: var(--surface-hover);
+  transform: scale(1.05);
 }
 
 .menu-button:focus {
-  outline: 2px solid var(--primary);
+  outline: 3px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -178,12 +197,13 @@ body {
   position: absolute;
   top: 100%;
   left: 0;
-  margin-top: 4px;
-  background: white;
+  margin-top: 8px;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  min-width: 140px;
+  box-shadow: var(--shadow-lg);
+  min-width: 160px;
+  padding: 8px;
 }
 
 .menu-list {
@@ -194,26 +214,31 @@ body {
 
 .menu-link {
   display: block;
-  padding: 8px 12px;
+  padding: 12px 16px;
   text-decoration: none;
   color: var(--text);
-  transition: background-color 0.2s ease;
+  border-radius: var(--radius-sm);
+  transition: all 0.3s ease;
+  font-weight: 600;
 }
 
 .menu-link:hover {
-  background-color: var(--border-light);
+  background-color: var(--surface-hover);
+  transform: translateX(4px);
 }
 
 /* Label */
 .label {
   display: block;
-  margin-bottom: 8px;
-  font-weight: bold;
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text);
 }
 
 /* Met Quota Tick */
 .met-quota {
   color: var(--success);
-  margin-left: 4px;
-  font-size: 14px;
+  margin-left: 8px;
+  font-size: 16px;
 }
