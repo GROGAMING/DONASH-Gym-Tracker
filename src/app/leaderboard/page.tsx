@@ -58,7 +58,7 @@ export default function LeaderboardPage() {
   }, [weekStart]);
 
   return (
-    <main style={{ padding: 20, maxWidth: 520, margin: "0 auto", fontFamily: "system-ui" }}>
+    <main className="main" style={{ maxWidth: 520 }}>
       <h2>Leaderboards</h2>
 
       <h3>This week (starting {weekStart})</h3>

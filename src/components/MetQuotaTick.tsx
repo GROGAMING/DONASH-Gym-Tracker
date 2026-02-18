@@ -12,5 +12,5 @@ export default function MetQuotaTick({ weeklyCount }: MetQuotaTickProps) {
   
   if (!met) return null;
   
-  return <span style={{ color: "#28a745", marginLeft: "4px", fontSize: "14px" }}>✅</span>;
+  return <span className="met-quota">✅</span>;
 }

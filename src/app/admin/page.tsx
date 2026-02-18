@@ -6,7 +6,7 @@ export default function AdminHome() {
   const authed = cookies().get("admin_authed")?.value === "1";
 
   return (
-    <main style={{ padding: 20, maxWidth: 720, margin: "0 auto", fontFamily: "system-ui" }}>
+    <main className="main" style={{ maxWidth: 720 }}>
       <h2>Admin</h2>
       {!authed ? (
         <p><Link href="/admin/login">Login</Link></p>

@@ -9,43 +9,19 @@ export default function HamburgerMenu() {
   return (
     <div style={{ position: "fixed", top: 12, left: 12, zIndex: 1000 }}>
       <button
+        className="menu-button"
         onClick={() => setOpen(!open)}
-        style={{
-          background: "#fff",
-          border: "1px solid #ccc",
-          borderRadius: 4,
-          padding: "6px 10px",
-          cursor: "pointer",
-          fontSize: 16
-        }}
       >
         {open ? "✕" : "☰"}
       </button>
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            marginTop: 4,
-            background: "#fff",
-            border: "1px solid #ccc",
-            borderRadius: 4,
-            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-            minWidth: 140
-          }}
-        >
-          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        <div className="menu-dropdown">
+          <ul className="menu-list">
             <li>
               <Link
                 href="/upload"
                 onClick={() => setOpen(false)}
-                style={{
-                  display: "block",
-                  padding: "8px 12px",
-                  textDecoration: "none",
-                  color: "#000"
-                }}
+                className="menu-link"
               >
                 Upload
               </Link>
@@ -54,12 +30,7 @@ export default function HamburgerMenu() {
               <Link
                 href="/leaderboard"
                 onClick={() => setOpen(false)}
-                style={{
-                  display: "block",
-                  padding: "8px 12px",
-                  textDecoration: "none",
-                  color: "#000"
-                }}
+                className="menu-link"
               >
                 Leaderboard
               </Link>
@@ -68,12 +39,7 @@ export default function HamburgerMenu() {
               <Link
                 href="/doom-scroll"
                 onClick={() => setOpen(false)}
-                style={{
-                  display: "block",
-                  padding: "8px 12px",
-                  textDecoration: "none",
-                  color: "#000"
-                }}
+                className="menu-link"
               >
                 Doom Scroll
               </Link>
@@ -82,12 +48,7 @@ export default function HamburgerMenu() {
               <Link
                 href="/admin"
                 onClick={() => setOpen(false)}
-                style={{
-                  display: "block",
-                  padding: "8px 12px",
-                  textDecoration: "none",
-                  color: "#000"
-                }}
+                className="menu-link"
               >
                 Admin
               </Link>

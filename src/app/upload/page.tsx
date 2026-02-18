@@ -102,13 +102,14 @@ export default function UploadPage() {
   }
 
   return (
-    <main style={{ padding: 20, maxWidth: 520, margin: "0 auto", fontFamily: "system-ui" }}>
+    <main className="main" style={{ maxWidth: 520 }}>
       <h2>Upload</h2>
-      <label>Name</label>
+      <label className="label">Name</label>
       <select
         value={userId}
         onChange={(e) => setUserId(e.target.value)}
-        style={{ display: "block", width: "100%", padding: 10, margin: "8px 0 16px" }}
+        className="input"
+        style={{ margin: "8px 0 16px" }}
         disabled={false}
       >
         <option value="">Select</option>
@@ -117,7 +118,7 @@ export default function UploadPage() {
         ))}
       </select>
 
-      <label>Photo (camera)</label>
+      <label className="label">Photo (camera)</label>
       <label
         htmlFor={userId ? "photo" : undefined}
         onClick={(e: MouseEvent<HTMLLabelElement>) => {
@@ -152,7 +153,7 @@ export default function UploadPage() {
         disabled={uploading}
       />
 
-      <button onClick={() => onSubmit()} style={{ padding: "10px 14px" }} disabled={uploading}>
+      <button onClick={() => onSubmit()} className="btn btn-primary" disabled={uploading}>
         Upload
       </button>
 

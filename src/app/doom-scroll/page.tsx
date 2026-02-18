@@ -70,7 +70,7 @@ export default function DoomScrollPage() {
   }
 
   return (
-    <main style={{ padding: 20, maxWidth: 720, margin: "0 auto", fontFamily: "system-ui" }}>
+    <main className="main" style={{ maxWidth: 720 }}>
       <h1>Doom Scroll</h1>
       
       {isPaused && (

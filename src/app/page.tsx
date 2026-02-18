@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <main style={{ padding: 20, maxWidth: 640, margin: "0 auto", fontFamily: "system-ui" }}>
+    <main className="main">
       <h1>Gym Tracker</h1>
       <ul>
         <li><Link href="/upload">Upload</Link></li>
