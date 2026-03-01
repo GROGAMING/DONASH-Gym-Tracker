@@ -1,0 +1,183 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Rep Receipt Design System — premium, minimal, mobile-first */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@700;800&display=swap');
+
+@layer base {
+  :root {
+    /* Core surfaces */
+    --background: 0 0% 97%;
+    --foreground: 220 14% 9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 14% 9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 14% 9%;
+
+    /* Brand */
+    --primary: 220 14% 9%;
+    --primary-foreground: 0 0% 98%;
+
+    /* Secondary surfaces */
+    --secondary: 220 13% 93%;
+    --secondary-foreground: 220 14% 9%;
+
+    /* Muted */
+    --muted: 220 12% 95%;
+    --muted-foreground: 220 9% 48%;
+
+    /* Accent — warm amber for gym energy */
+    --accent: 35 95% 55%;
+    --accent-foreground: 0 0% 100%;
+    --accent-muted: 35 95% 95%;
+
+    /* States */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 142 71% 95%;
+
+    /* UI */
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 220 14% 9%;
+
+    --radius: 0.875rem;
+
+    /* Sidebar (not used heavily) */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 220 14% 9%;
+    --sidebar-primary: 220 14% 9%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 220 13% 93%;
+    --sidebar-accent-foreground: 220 14% 9%;
+    --sidebar-border: 220 13% 90%;
+    --sidebar-ring: 35 95% 55%;
+
+    /* Custom tokens */
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.05);
+    --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.10), 0 8px 32px rgba(0,0,0,0.08);
+    --shadow-button: 0 2px 8px rgba(0,0,0,0.18);
+
+    --font-display: 'Sora', sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  .dark {
+    --background: 220 14% 6%;
+    --foreground: 0 0% 96%;
+    --card: 220 13% 9%;
+    --card-foreground: 0 0% 96%;
+    --popover: 220 13% 10%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 220 14% 6%;
+    --secondary: 220 12% 14%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 220 12% 14%;
+    --muted-foreground: 220 9% 58%;
+    --accent: 35 95% 55%;
+    --accent-foreground: 0 0% 100%;
+    --accent-muted: 35 95% 12%;
+    --border: 220 12% 16%;
+    --input: 220 12% 16%;
+    --ring: 35 95% 55%;
+    --success-muted: 142 71% 12%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    overscroll-behavior: none;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-card-hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .shadow-button {
+    box-shadow: var(--shadow-button);
+  }
+
+  /* Safe area padding for iPhone notch/home indicator */
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Skeleton shimmer animation */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--secondary)) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Fade up entry animation */
+  .animate-fade-up {
+    animation: fadeUp 0.35s ease-out both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out both;
+  }
+
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  /* Press-down effect for buttons */
+  .active-scale:active {
+    transform: scale(0.97);
+    transition: transform 0.1s ease;
+  }
+}
