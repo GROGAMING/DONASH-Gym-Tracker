@@ -19,4 +19,6 @@
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
+}{
+  "exclude": ["lovable-ui", "lovable-ui/**"]
 }
