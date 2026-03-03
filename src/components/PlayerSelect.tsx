@@ -81,7 +81,7 @@ const PlayerSelect: React.FC<PlayerSelectProps> = ({ players, selected, onSelect
             </div>
           </div>
           {/* Options */}
-          <div className="max-h-56 overflow-y-auto py-1">
+          <div className="max-h-[60vh] overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] py-1">
             {filtered.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                 No players found

@@ -1,61 +1,112 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Menu } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 export default function HamburgerMenu() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const lastYRef = useRef(0);
+  const tickingRef = useRef(false);
+
+  const links = useMemo(
+    () => [
+      { href: "/", label: "Home" },
+      { href: "/upload", label: "Upload" },
+      { href: "/leaderboard", label: "Leaderboard" },
+      { href: "/doom-scroll", label: "Doom Scroll" },
+      { href: "/admin", label: "Admin" },
+    ],
+    [],
+  );
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      if (tickingRef.current) return;
+      tickingRef.current = true;
+      window.requestAnimationFrame(() => {
+        const y = window.scrollY || 0;
+        const last = lastYRef.current;
+        const delta = y - last;
+
+        if (y <= 10) {
+          setHidden(false);
+        } else if (delta > 6) {
+          setHidden(true);
+        } else if (delta < -6) {
+          setHidden(false);
+        }
+
+        lastYRef.current = y;
+        tickingRef.current = false;
+      });
+    };
+
+    lastYRef.current = window.scrollY || 0;
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
-    <div style={{ position: "fixed", top: 12, left: 12, zIndex: 1000 }}>
-      <button
-        className="menu-button"
-        onClick={() => setOpen(!open)}
+    <>
+      <div
+        className={
+          "fixed left-3 z-50 transition-all duration-200 " +
+          "top-[calc(env(safe-area-inset-top)+12px)] " +
+          (hidden ? "opacity-0 -translate-y-2 pointer-events-none" : "opacity-100 translate-y-0")
+        }
       >
-        {open ? "✕" : "☰"}
-      </button>
-      {open && (
-        <div className="menu-dropdown">
-          <ul className="menu-list">
-            <li>
-              <Link
-                href="/upload"
-                onClick={() => setOpen(false)}
-                className="menu-link"
-              >
-                Upload
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/leaderboard"
-                onClick={() => setOpen(false)}
-                className="menu-link"
-              >
-                Leaderboard
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/doom-scroll"
-                onClick={() => setOpen(false)}
-                className="menu-link"
-              >
-                Doom Scroll
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/admin"
-                onClick={() => setOpen(false)}
-                className="menu-link"
-              >
-                Admin
-              </Link>
-            </li>
-          </ul>
-        </div>
-      )}
-    </div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon"
+          className="h-11 w-11 rounded-2xl shadow-card border border-border bg-card/95 backdrop-blur-sm"
+          onClick={() => setOpen(true)}
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      </div>
+
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="left" className="p-0">
+          <div className="p-6 border-b border-border">
+            <SheetHeader className="space-y-1">
+              <SheetTitle className="font-display font-extrabold">Gym Tracker</SheetTitle>
+              <p className="text-sm text-muted-foreground">Rep Receipt</p>
+            </SheetHeader>
+          </div>
+
+          <nav className="p-3">
+            <ul className="space-y-1">
+              {links.map((l) => (
+                <li key={l.href}>
+                  <Link
+                    href={l.href}
+                    onClick={() => setOpen(false)}
+                    className={
+                      "block rounded-xl px-4 py-3 text-sm font-semibold transition-colors " +
+                      (pathname === l.href ? "bg-secondary" : "hover:bg-secondary")
+                    }
+                  >
+                    {l.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

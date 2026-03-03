@@ -157,7 +157,7 @@ export default function UploadReviewScreen({ teamName }: { teamName: string }) {
     <AppShell teamName={teamName} showBottomNav={false}>
       {toast && <ToastBanner message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-      <div className="max-w-sm mx-auto px-4 pt-5 pb-4 animate-fade-up">
+      <div className="max-w-sm mx-auto px-4 pt-5 pb-28 animate-fade-up">
         <div className="mb-4">
           <BackButton onClick={onBack} label="Back" />
         </div>
@@ -206,22 +206,6 @@ export default function UploadReviewScreen({ teamName }: { teamName: string }) {
           </div>
         )}
 
-        <div className="mt-4 flex gap-3">
-          <SecondaryButton onClick={onRetake} className="flex-1 py-3 justify-center gap-2" disabled={uploading}>
-            <RefreshCcw className="w-3.5 h-3.5" />
-            Retake
-          </SecondaryButton>
-          <PrimaryButton
-            type="button"
-            onClick={() => void onPost()}
-            className="flex-1 py-3 justify-center gap-2"
-            loading={uploading}
-          >
-            <Camera className="w-3.5 h-3.5" />
-            Upload / Post
-          </PrimaryButton>
-        </div>
-
         {uploading && (
           <div className="mt-4 bg-card border border-border rounded-2xl p-5 shadow-card animate-fade-up">
             <div className="flex justify-between mb-2">
@@ -233,6 +217,27 @@ export default function UploadReviewScreen({ teamName }: { teamName: string }) {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 bg-card/95 backdrop-blur-sm border-t border-border safe-bottom">
+        <div className="max-w-sm mx-auto px-4 py-3">
+          <div className="flex gap-3">
+            <SecondaryButton onClick={onRetake} className="flex-1 py-3 justify-center gap-2" disabled={uploading}>
+              <RefreshCcw className="w-3.5 h-3.5" />
+              Retake
+            </SecondaryButton>
+            <PrimaryButton
+              type="button"
+              onClick={() => void onPost()}
+              className="flex-1 py-3 justify-center gap-2"
+              disabled={uploading}
+              loading={uploading}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              {uploading ? "Uploading…" : "Upload"}
+            </PrimaryButton>
+          </div>
+        </div>
       </div>
     </AppShell>
   );
