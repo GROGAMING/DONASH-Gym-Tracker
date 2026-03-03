@@ -229,7 +229,7 @@ export default function UploadReviewScreen({ teamName }: { teamName: string }) {
             <PrimaryButton
               type="button"
               onClick={() => void onPost()}
-              className="flex-1 py-3 justify-center gap-2"
+              className="flex-1 py-3 justify-center gap-2 bg-white text-black hover:bg-white/90 active:bg-white/85"
               disabled={uploading}
               loading={uploading}
             >

@@ -17,7 +17,6 @@ export default function HamburgerMenu() {
 
   const links = useMemo(
     () => [
-      { href: "/", label: "Home" },
       { href: "/upload", label: "Upload" },
       { href: "/leaderboard", label: "Leaderboard" },
       { href: "/doom-scroll", label: "Doom Scroll" },
@@ -31,6 +30,10 @@ export default function HamburgerMenu() {
   }, [pathname]);
 
   useEffect(() => {
+    if (open) setHidden(false);
+  }, [open]);
+
+  useEffect(() => {
     const onScroll = () => {
       if (tickingRef.current) return;
       tickingRef.current = true;
@@ -39,11 +42,18 @@ export default function HamburgerMenu() {
         const last = lastYRef.current;
         const delta = y - last;
 
-        if (y <= 10) {
+        if (open) {
           setHidden(false);
-        } else if (delta > 6) {
+          lastYRef.current = y;
+          tickingRef.current = false;
+          return;
+        }
+
+        if (y <= 12) {
+          setHidden(false);
+        } else if (y > 80 && delta > 10) {
           setHidden(true);
-        } else if (delta < -6) {
+        } else if (delta < -10) {
           setHidden(false);
         }
 
@@ -61,7 +71,7 @@ export default function HamburgerMenu() {
     <>
       <div
         className={
-          "fixed left-3 z-50 transition-all duration-200 " +
+          "fixed left-3 z-[60] transition-all duration-200 " +
           "top-[calc(env(safe-area-inset-top)+12px)] " +
           (hidden ? "opacity-0 -translate-y-2 pointer-events-none" : "opacity-100 translate-y-0")
         }
@@ -96,7 +106,7 @@ export default function HamburgerMenu() {
                     onClick={() => setOpen(false)}
                     className={
                       "block rounded-xl px-4 py-3 text-sm font-semibold transition-colors " +
-                      (pathname === l.href ? "bg-secondary" : "hover:bg-secondary")
+                      (pathname === l.href || pathname.startsWith(l.href + "/") ? "bg-secondary" : "hover:bg-secondary")
                     }
                   >
                     {l.label}
