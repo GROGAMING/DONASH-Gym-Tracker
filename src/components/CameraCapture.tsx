@@ -90,20 +90,14 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
             <RefreshCcw className="w-3.5 h-3.5" />
             Retake
           </SecondaryButton>
-          <button
+          <PrimaryButton
             type="button"
             onClick={onUse}
-            className="
-              flex-1 flex items-center justify-center gap-2
-              bg-primary text-primary-foreground
-              font-semibold text-sm tracking-tight
-              py-3 rounded-xl shadow-button
-              transition-all duration-150 active-scale
-            "
+            className="flex-1 py-3 justify-center gap-2"
           >
             <Check className="w-3.5 h-3.5" />
             Use Photo
-          </button>
+          </PrimaryButton>
         </div>
       </div>
     );

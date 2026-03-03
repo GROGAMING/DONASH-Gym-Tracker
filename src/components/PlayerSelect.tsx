@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { ChevronDown, Search, Check } from "lucide-react";
 
 interface PlayerSelectProps {
@@ -13,9 +13,11 @@ const PlayerSelect: React.FC<PlayerSelectProps> = ({ players, selected, onSelect
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const filtered = players.filter((p) =>
-    p.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return players;
+    return players.filter((p) => p.toLowerCase().includes(q));
+  }, [players, search]);
 
   useEffect(() => {
     if (open && searchRef.current) {
@@ -63,9 +65,9 @@ const PlayerSelect: React.FC<PlayerSelectProps> = ({ players, selected, onSelect
       </button>
 
       {open && (
-        <div className="absolute z-50 left-0 right-0 top-full mt-2 border border-border rounded-xl shadow-card-hover overflow-hidden animate-scale-in" style={{ backgroundColor: 'hsl(0, 0%, 100%)' }}>
+        <div className="absolute z-50 left-0 right-0 top-full mt-2 border border-border rounded-xl shadow-card-hover overflow-hidden animate-scale-in bg-card text-foreground">
           {/* Search */}
-          <div className="p-2 border-b border-border" style={{ backgroundColor: 'hsl(0, 0%, 100%)' }}>
+          <div className="p-2 border-b border-border">
             <div className="flex items-center gap-2 px-3 py-2 bg-secondary rounded-lg">
               <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <input
@@ -79,7 +81,7 @@ const PlayerSelect: React.FC<PlayerSelectProps> = ({ players, selected, onSelect
             </div>
           </div>
           {/* Options */}
-          <div className="max-h-56 overflow-y-auto py-1" style={{ backgroundColor: 'hsl(0, 0%, 100%)' }}>
+          <div className="max-h-56 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                 No players found
@@ -90,7 +92,7 @@ const PlayerSelect: React.FC<PlayerSelectProps> = ({ players, selected, onSelect
                   key={name}
                   type="button"
                   onClick={() => handleSelect(name)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-secondary transition-colors text-left" style={{ backgroundColor: 'hsl(0, 0%, 100%)' }}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-secondary transition-colors text-left"
                 >
                   <span className={name === selected ? "font-semibold text-foreground" : "text-foreground"}>
                     {name}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Camera, Pencil } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
@@ -31,6 +31,8 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
+
+  const playerNames = useMemo(() => players.map((p: Player) => p.name), [players]);
 
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const selectedPlayer = useMemo(() => {
@@ -78,29 +80,10 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
     };
   }, [capturedPreview]);
 
-  const onCapture = useCallback((file: File, preview: string) => {
-    setCapturedFile(file);
-    setCapturedPreview(preview);
-    setStep("captured");
-  }, []);
-
-  const onRetake = useCallback(() => {
-    if (capturedPreview) URL.revokeObjectURL(capturedPreview);
-    setCapturedFile(null);
-    setCapturedPreview(null);
-    setCaption("");
-    setProgress(0);
-    setUploading(false);
-    setStep("capture");
-  }, [capturedPreview]);
-
-  const onUse = useCallback(() => {
-    setStep("captured");
-  }, []);
-
   async function compressImage(file: File): Promise<File> {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
       img.onload = () => {
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
@@ -117,19 +100,26 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
           (blob) => {
             if (!blob) return reject(new Error("Compression failed"));
             const compressed = new File([blob], file.name || "capture.jpg", { type: "image/jpeg" });
+            URL.revokeObjectURL(objectUrl);
             resolve(compressed);
           },
           "image/jpeg",
           0.7,
         );
       };
-      img.onerror = () => reject(new Error("Image load failed"));
-      img.src = URL.createObjectURL(file);
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Image load failed"));
+      };
+      img.src = objectUrl;
     });
   }
 
-  const handlePost = useCallback(async () => {
-    if (!selectedPlayerId || !capturedFile || uploading) return;
+  const handlePost = useCallback(
+    async (fileOverride?: File, previewOverride?: string | null) => {
+      const file = fileOverride ?? capturedFile;
+      const preview = previewOverride ?? capturedPreview;
+      if (!selectedPlayerId || !file || uploading) return;
 
     setToast(null);
     setUploading(true);
@@ -149,7 +139,9 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
     }, 180);
 
     try {
-      const fileToUpload = await compressImage(capturedFile).catch(() => capturedFile);
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+      const fileToUpload = await compressImage(file).catch(() => file);
 
       const formData = new FormData();
       formData.set("userId", selectedPlayerId);
@@ -171,7 +163,7 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
 
       // Reset UI and go to leaderboard (existing behavior)
       setCapturedFile(null);
-      if (capturedPreview) URL.revokeObjectURL(capturedPreview);
+      if (preview) URL.revokeObjectURL(preview);
       setCapturedPreview(null);
       setCaption("");
       setStep("capture");
@@ -184,7 +176,34 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
       setUploading(false);
       setProgress(0);
     }
-  }, [capturedFile, capturedPreview, router, selectedPlayerId, uploading]);
+    },
+    [capturedFile, capturedPreview, router, selectedPlayerId, uploading],
+  );
+
+  const onCapture = useCallback(
+    (file: File, preview: string) => {
+      setCapturedFile(file);
+      setCapturedPreview(preview);
+      setStep("captured");
+      void handlePost(file, preview);
+    },
+    [handlePost],
+  );
+
+  const onRetake = useCallback(() => {
+    if (capturedPreview) URL.revokeObjectURL(capturedPreview);
+    setCapturedFile(null);
+    setCapturedPreview(null);
+    setCaption("");
+    setProgress(0);
+    setUploading(false);
+    setStep("capture");
+  }, [capturedPreview]);
+
+  const onUse = useCallback(() => {
+    setStep("captured");
+    void handlePost();
+  }, [handlePost]);
 
   const onBack = useCallback(() => {
     router.push("/");
@@ -194,9 +213,19 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
     <AppShell teamName={teamName}>
       {toast && <ToastBanner message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-      <div className="max-w-sm mx-auto px-4 pt-5 animate-fade-up">
+      <div className="max-w-sm mx-auto px-4 pt-5 pb-4 animate-fade-up">
         <div className="mb-4">
           <BackButton onClick={onBack} />
+        </div>
+
+        <div className="flex items-center gap-2.5 mb-5">
+          <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-button">
+            <Camera className="w-4.5 h-4.5 text-accent-foreground" strokeWidth={2} />
+          </div>
+          <div>
+            <h2 className="font-display font-extrabold text-xl text-foreground leading-tight">Upload</h2>
+            <p className="text-xs text-muted-foreground">Prove you trained today</p>
+          </div>
         </div>
 
         {!selectedPlayer && (
@@ -205,7 +234,7 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
             <p className="text-sm text-muted-foreground mb-6">Pick your name to get started.</p>
 
             <PlayerSelect
-              players={players.map((p: Player) => p.name)}
+              players={playerNames}
               selected={null}
               onSelect={(name: string) => {
                 const p = players.find((x: Player) => x.name === name);
@@ -268,7 +297,7 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
                   <p className="text-right text-xs text-muted-foreground mt-1">{caption.length}/200</p>
                 )}
                 <div className="mt-4">
-                  <PrimaryButton onClick={handlePost}>Post to team</PrimaryButton>
+                  <PrimaryButton onClick={() => void handlePost()}>Post to team</PrimaryButton>
                 </div>
               </div>
             )}
