@@ -17,6 +17,7 @@ type Item = {
   created_at: string;
   image_path: string;
   url?: string | null;
+  comment?: string | null;
   publicUrl: string;
 };
 
@@ -43,6 +44,7 @@ function mapItemToPost(x: Item): FeedPost {
     playerName: x.name,
     timestamp: formatTimestamp(x.created_at),
     image: x.url || x.publicUrl,
+    caption: typeof x.comment === "string" && x.comment.trim().length > 0 ? x.comment : undefined,
     initials: initialsFromName(x.name),
   };
 }

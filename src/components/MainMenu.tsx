@@ -12,9 +12,10 @@ const MENU_ITEMS = [
   {
     id: "upload" as MainTab,
     label: "Upload",
-    description: "Post your gym proof photo to the team",
+    description: "Take a photo and post it",
     Icon: Camera,
-    accent: true,
+    accent: false,
+    disabled: false,
   },
   {
     id: "leaderboard" as MainTab,

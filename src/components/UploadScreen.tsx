@@ -146,6 +146,9 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
       const formData = new FormData();
       formData.set("userId", selectedPlayerId);
       formData.set("file", fileToUpload);
+      if (caption.trim().length > 0) {
+        formData.set("comment", caption.trim());
+      }
 
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -177,7 +180,7 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
       setProgress(0);
     }
     },
-    [capturedFile, capturedPreview, router, selectedPlayerId, uploading],
+    [caption, capturedFile, capturedPreview, router, selectedPlayerId, uploading],
   );
 
   const onCapture = useCallback(
@@ -185,9 +188,8 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
       setCapturedFile(file);
       setCapturedPreview(preview);
       setStep("captured");
-      void handlePost(file, preview);
     },
-    [handlePost],
+    [],
   );
 
   const onRetake = useCallback(() => {
@@ -288,14 +290,12 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
                 <textarea
                   value={caption}
                   onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setCaption(e.target.value)}
-                  placeholder="Add a caption… (optional)"
-                  maxLength={200}
+                  placeholder="Add a comment (optional)"
+                  maxLength={120}
                   rows={2}
                   className="w-full bg-card border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus:border-foreground/30 transition-colors"
                 />
-                {caption.length > 0 && (
-                  <p className="text-right text-xs text-muted-foreground mt-1">{caption.length}/200</p>
-                )}
+                <p className="text-right text-xs text-muted-foreground mt-1">{caption.length}/120</p>
                 <div className="mt-4">
                   <PrimaryButton onClick={() => void handlePost()}>Post to team</PrimaryButton>
                 </div>

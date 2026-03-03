@@ -9,6 +9,7 @@ export async function POST(req: Request) {
 
   const userId = formData.get("userId");
   const file = formData.get("file");
+  const comment = formData.get("comment");
 
   if (typeof userId !== "string" || !userId) {
     return NextResponse.json({ error: "Missing userId" }, { status: 400 });
@@ -36,12 +37,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: upErr.message }, { status: 500 });
   }
 
-  const { error: insErr } = await supabaseAdmin.from("uploads").insert({
+  const insertBase: Record<string, unknown> = {
     user_id: userId,
     image_path: objectPath,
     status: "active",
     team_id: TEAM_ID,
-  });
+  };
+
+  const insertWithComment: Record<string, unknown> = {
+    ...insertBase,
+    ...(typeof comment === "string" && comment.trim().length > 0 ? { comment: comment.trim() } : {}),
+  };
+
+  let insErr = (await supabaseAdmin.from("uploads").insert(insertWithComment)).error;
+
+  // Backward-compatible fallback if the DB/schema doesn't have a comment field
+  if (insErr && /column .*comment.* does not exist/i.test(insErr.message)) {
+    insErr = (await supabaseAdmin.from("uploads").insert(insertBase)).error;
+  }
 
   if (insErr) {
     return NextResponse.json({ error: insErr.message }, { status: 500 });

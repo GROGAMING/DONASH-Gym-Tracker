@@ -76,8 +76,6 @@ const FeedItem: React.FC<FeedItemProps> = ({ post, index }) => {
           </div>
         </div>
       )}
-
-      {!post.caption && <div className="h-2" />}
     </article>
   );
 };
