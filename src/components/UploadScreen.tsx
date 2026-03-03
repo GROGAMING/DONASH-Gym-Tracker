@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Pencil } from "lucide-react";
 
@@ -9,13 +9,14 @@ import BackButton from "@/components/BackButton";
 import CameraCapture from "@/components/CameraCapture";
 import PlayerSelect from "@/components/PlayerSelect";
 import { PrimaryButton, SecondaryButton } from "@/components/GymButtons";
+import { useUploadFlow } from "@/components/UploadFlowContext";
 import ToastBanner from "@/components/ToastBanner";
 
 type Player = { id: string; name: string };
 
 type ToastState = { message: string; type: "success" | "error" };
 
-type UploadStep = "select" | "capture" | "captured" | "posting";
+type UploadStep = "select" | "capture";
 
 function initialsFromName(name: string) {
   return name
@@ -28,6 +29,7 @@ function initialsFromName(name: string) {
 
 export default function UploadScreen({ teamName }: { teamName: string }) {
   const router = useRouter();
+  const { setDraft, clearDraft } = useUploadFlow();
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
@@ -39,16 +41,8 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
     return players.find((p: Player) => p.id === selectedPlayerId) ?? null;
   }, [players, selectedPlayerId]);
 
-  const [step, setStep] = useState<UploadStep>("select");
-  const [capturedFile, setCapturedFile] = useState<File | null>(null);
-  const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
-  const [caption, setCaption] = useState("");
-
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-
   const [toast, setToast] = useState<ToastState | null>(null);
-  const progressTimerRef = useRef<number | null>(null);
+  const [step, setStep] = useState<UploadStep>("select");
 
   useEffect(() => {
     (async () => {
@@ -69,150 +63,30 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
     })();
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (progressTimerRef.current) {
-        window.clearInterval(progressTimerRef.current);
-      }
-      if (capturedPreview) {
-        URL.revokeObjectURL(capturedPreview);
-      }
-    };
-  }, [capturedPreview]);
-
-  async function compressImage(file: File): Promise<File> {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const objectUrl = URL.createObjectURL(file);
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return reject(new Error("Canvas context unavailable"));
-
-        const { width, height } = img;
-        const longest = Math.max(width, height);
-        const scale = longest > 600 ? 600 / longest : 1;
-        canvas.width = width * scale;
-        canvas.height = height * scale;
-
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) return reject(new Error("Compression failed"));
-            const compressed = new File([blob], file.name || "capture.jpg", { type: "image/jpeg" });
-            URL.revokeObjectURL(objectUrl);
-            resolve(compressed);
-          },
-          "image/jpeg",
-          0.7,
-        );
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        reject(new Error("Image load failed"));
-      };
-      img.src = objectUrl;
-    });
-  }
-
-  const handlePost = useCallback(
-    async (fileOverride?: File, previewOverride?: string | null) => {
-      const file = fileOverride ?? capturedFile;
-      const preview = previewOverride ?? capturedPreview;
-      if (!selectedPlayerId || !file || uploading) return;
-
-    setToast(null);
-    setUploading(true);
-    setStep("posting");
-    setProgress(10);
-
-    if (progressTimerRef.current) {
-      window.clearInterval(progressTimerRef.current);
-      progressTimerRef.current = null;
-    }
-
-    progressTimerRef.current = window.setInterval(() => {
-      setProgress((p: number) => {
-        if (p >= 90) return p;
-        return Math.min(p + 7, 90);
-      });
-    }, 180);
-
-    try {
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-
-      const fileToUpload = await compressImage(file).catch(() => file);
-
-      const formData = new FormData();
-      formData.set("userId", selectedPlayerId);
-      formData.set("file", fileToUpload);
-      if (caption.trim().length > 0) {
-        formData.set("comment", caption.trim());
-      }
-
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setToast({ message: body?.error || "Upload failed.", type: "error" });
-        return;
-      }
-
-      setProgress(100);
-      setToast({ message: "Posted to team!", type: "success" });
-
-      // Reset UI and go to leaderboard (existing behavior)
-      setCapturedFile(null);
-      if (preview) URL.revokeObjectURL(preview);
-      setCapturedPreview(null);
-      setCaption("");
-      setStep("capture");
-      router.push("/leaderboard");
-    } finally {
-      if (progressTimerRef.current) {
-        window.clearInterval(progressTimerRef.current);
-        progressTimerRef.current = null;
-      }
-      setUploading(false);
-      setProgress(0);
-    }
-    },
-    [caption, capturedFile, capturedPreview, router, selectedPlayerId, uploading],
-  );
-
   const onCapture = useCallback(
     (file: File, preview: string) => {
-      setCapturedFile(file);
-      setCapturedPreview(preview);
-      setStep("captured");
+      if (!selectedPlayerId) return;
+      clearDraft();
+      setDraft({ userId: selectedPlayerId, file, previewUrl: preview });
+      router.push("/upload/review");
     },
-    [],
+    [clearDraft, router, selectedPlayerId, setDraft],
   );
 
   const onRetake = useCallback(() => {
-    if (capturedPreview) URL.revokeObjectURL(capturedPreview);
-    setCapturedFile(null);
-    setCapturedPreview(null);
-    setCaption("");
-    setProgress(0);
-    setUploading(false);
     setStep("capture");
-  }, [capturedPreview]);
+  }, []);
 
   const onUse = useCallback(() => {
-    setStep("captured");
-    void handlePost();
-  }, [handlePost]);
+  }, []);
 
   const onBack = useCallback(() => {
     router.push("/");
   }, [router]);
 
   return (
-    <AppShell teamName={teamName}>
+    <AppShell teamName={teamName} showBottomNav={false}>
+
       {toast && <ToastBanner message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
       <div className="max-w-sm mx-auto px-4 pt-5 pb-4 animate-fade-up">
@@ -278,29 +152,12 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
 
             <CameraCapture
               onCapture={onCapture}
-              preview={step === "captured" || step === "posting" ? capturedPreview : null}
+              preview={null}
               onRetake={onRetake}
               onUse={onUse}
-              uploading={uploading}
-              progress={Math.min(progress, 100)}
+              uploading={false}
+              progress={0}
             />
-
-            {step === "captured" && !uploading && (
-              <div className="mt-4 animate-fade-up">
-                <textarea
-                  value={caption}
-                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setCaption(e.target.value)}
-                  placeholder="Add a comment (optional)"
-                  maxLength={120}
-                  rows={2}
-                  className="w-full bg-card border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus:border-foreground/30 transition-colors"
-                />
-                <p className="text-right text-xs text-muted-foreground mt-1">{caption.length}/120</p>
-                <div className="mt-4">
-                  <PrimaryButton onClick={() => void handlePost()}>Post to team</PrimaryButton>
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>

@@ -31,7 +31,9 @@ function tabToPath(tab: Tab): string {
   }
 }
 
-export default function AppShell({ children, teamName }: { children: ReactNode; teamName: string }) {
+export default function AppShell(
+  { children, teamName, showBottomNav = true }: { children: ReactNode; teamName: string; showBottomNav?: boolean },
+) {
   const router = useRouter();
   const pathname = usePathname();
   const active = pathToTab(pathname);
@@ -46,8 +48,8 @@ export default function AppShell({ children, teamName }: { children: ReactNode; 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <TeamHeader teamName={teamName} />
-      <main className="flex-1 overflow-y-auto pb-24">{children}</main>
-      <BottomNav active={active} onChange={onChange} />
+      <main className={"flex-1 overflow-y-auto " + (showBottomNav ? "pb-24" : "")}>{children}</main>
+      {showBottomNav && <BottomNav active={active} onChange={onChange} />}
     </div>
   );
 }
