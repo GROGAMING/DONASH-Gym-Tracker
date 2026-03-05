@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, AlertCircle } from "lucide-react";
+import { ClipboardCheck, ChevronRight, History, AlertCircle } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
 import PageContainer from "@/components/PageContainer";
 import ToastBanner from "@/components/ToastBanner";
+import { PrimaryButton } from "@/components/GymButtons";
 
 type ToastState = { message: string; type: "success" | "error" };
 
@@ -31,18 +32,16 @@ type ApiResponse = {
   error?: string;
 };
 
-function SkeletonRow() {
+function SkeletonCard() {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-card border border-border shadow-card animate-pulse">
-      <div className="w-5 h-5 rounded-md bg-secondary" />
-      <div className="flex-1">
-        <div className="h-3 w-2/3 bg-secondary rounded" />
-      </div>
+    <div className="bg-card border border-border rounded-2xl shadow-card p-5 animate-pulse">
+      <div className="h-4 w-2/3 bg-secondary rounded" />
+      <div className="mt-2 h-3 w-1/3 bg-secondary rounded" />
     </div>
   );
 }
 
-export default function SessionsScreen({ teamName }: { teamName: string }) {
+export default function PlayerSessionsListScreen({ teamName }: { teamName: string }) {
   const router = useRouter();
 
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -59,14 +58,14 @@ export default function SessionsScreen({ teamName }: { teamName: string }) {
       const body = (await res.json().catch(() => null)) as ApiResponse | null;
 
       if (!res.ok) {
-        setError(body?.error || "Failed to load session.");
+        setError(body?.error || "Failed to load sessions.");
         setData(null);
         return;
       }
 
       setData(body);
     } catch {
-      setError("Failed to load session.");
+      setError("Failed to load sessions.");
       setData(null);
     } finally {
       setLoading(false);
@@ -77,23 +76,27 @@ export default function SessionsScreen({ teamName }: { teamName: string }) {
     void load();
   }, [load]);
 
-  const sessionTitle = useMemo(() => {
+  const title = useMemo(() => {
     const t = data?.session?.template_title;
     if (typeof t === "string" && t.trim().length > 0) return t;
     return "This week’s session";
   }, [data?.session?.template_title]);
-
-  const onBack = useCallback(() => {
-    router.push("/");
-  }, [router]);
 
   return (
     <AppShell teamName={teamName}>
       {toast && <ToastBanner message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
       <PageContainer className="pt-5 sm:pt-6 pb-8 animate-fade-up">
-        <div className="mb-4">
-          <BackButton onClick={onBack} />
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <BackButton onClick={() => router.push("/")} />
+          <button
+            type="button"
+            onClick={() => router.push("/sessions/history")}
+            className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <History className="w-4 h-4" />
+            History
+          </button>
         </div>
 
         <div className="flex items-center gap-2.5 mb-5">
@@ -102,68 +105,47 @@ export default function SessionsScreen({ teamName }: { teamName: string }) {
           </div>
           <div>
             <h2 className="font-display font-extrabold text-xl text-foreground leading-tight">Sessions</h2>
-            <p className="text-xs text-muted-foreground">What you’re training this week</p>
+            <p className="text-xs text-muted-foreground">Log your training</p>
           </div>
         </div>
 
         {loading ? (
           <div className="space-y-3">
-            <div className="bg-card border border-border rounded-2xl shadow-card p-5 animate-pulse">
-              <div className="h-4 w-2/3 bg-secondary rounded" />
-              <div className="mt-2 h-3 w-1/3 bg-secondary rounded" />
-            </div>
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
         ) : error ? (
           <div className="bg-card border border-border rounded-2xl shadow-card p-6">
             <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center mb-4">
               <AlertCircle className="w-5 h-5 text-foreground" />
             </div>
-            <h3 className="font-display font-bold text-lg text-foreground mb-1">Couldn’t load session</h3>
+            <h3 className="font-display font-bold text-lg text-foreground mb-1">Couldn’t load sessions</h3>
             <p className="text-sm text-muted-foreground mb-5">{error}</p>
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="w-full bg-primary text-primary-foreground rounded-xl py-3 text-sm font-semibold shadow-button hover:opacity-95 active-scale"
-            >
-              Try again
-            </button>
+            <PrimaryButton type="button" onClick={() => void load()}>Try again</PrimaryButton>
           </div>
         ) : !data?.session ? (
           <div className="bg-card border border-border rounded-2xl shadow-card p-6">
-            <h3 className="font-display font-bold text-lg text-foreground mb-1">No session assigned yet</h3>
+            <h3 className="font-display font-bold text-lg text-foreground mb-1">No session posted yet</h3>
             <p className="text-sm text-muted-foreground">Check back later.</p>
           </div>
         ) : (
-          <>
-            <div className="bg-card border border-border rounded-2xl shadow-card p-5 mb-4">
-              <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
-              <p className="text-sm font-semibold text-foreground mt-1">{data.weekStart}</p>
-              <p className="font-display font-extrabold text-lg text-foreground mt-3">{sessionTitle}</p>
+          <button
+            type="button"
+            onClick={() => router.push(`/sessions/${encodeURIComponent(data.session!.id)}`)}
+            className="w-full text-left bg-card border border-border rounded-2xl shadow-card p-5 hover:opacity-95 transition-opacity"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
+                <p className="text-sm font-semibold text-foreground mt-1">{data.weekStart}</p>
+                <p className="font-display font-extrabold text-lg text-foreground mt-3">{title}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {data.session.exercises.length} exercise{data.session.exercises.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground mt-1" />
             </div>
-
-            <div className="space-y-2">
-              {data.session.exercises.map((ex, i) => (
-                <div
-                  key={ex.id || `${ex.name}-${i}`}
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl bg-card border border-border shadow-card"
-                >
-                  <div className="w-5 h-5 rounded-md border-2 border-muted-foreground/30 bg-background flex items-center justify-center shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{ex.name}</p>
-                  </div>
-                </div>
-              ))}
-
-              {data.session.exercises.length === 0 && (
-                <div className="bg-card border border-border rounded-2xl shadow-card p-6">
-                  <p className="text-sm text-muted-foreground">No exercises found for this session.</p>
-                </div>
-              )}
-            </div>
-          </>
+          </button>
         )}
       </PageContainer>
     </AppShell>

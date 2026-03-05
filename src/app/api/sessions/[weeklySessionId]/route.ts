@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 import { TEAM_ID } from "@/lib/team";
-import { mondayWeekStartISO } from "@/lib/week";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,60 +21,50 @@ type ExerciseRow = {
   target_reps: string | null;
 };
 
-export async function GET() {
-  const weekStart = mondayWeekStartISO(new Date());
+export async function GET(_req: NextRequest, ctx: { params: { weeklySessionId: string } }) {
+  const weeklySessionId = ctx.params.weeklySessionId;
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
-  const { data: assigned, error: aErr } = await supabase
+  const { data: session, error: sErr } = await supabase
     .from("weekly_sessions")
     .select("id, week_start, template_id, session_templates(id, title)")
     .eq("team_id", TEAM_ID)
-    .eq("week_start", weekStart)
+    .eq("id", weeklySessionId)
     .maybeSingle();
 
-  if (aErr) {
-    return NextResponse.json({ error: aErr.message, weekStart }, { status: 500 });
-  }
+  if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
+  if (!session) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (!assigned) {
-    return NextResponse.json({ weekStart, session: null }, { headers: { "Cache-Control": "no-store" } });
-  }
-
-  const a = assigned as WeeklySessionRow;
-
-  const templateTitle = a.session_templates?.title ?? null;
+  const s = session as WeeklySessionRow;
 
   const { data: exercises, error: eErr } = await supabase
     .from("session_template_exercises")
     .select("id, exercise_name, sort_order, target_sets, target_reps")
     .eq("team_id", TEAM_ID)
-    .eq("template_id", a.template_id)
+    .eq("template_id", s.template_id)
     .order("sort_order", { ascending: true });
 
-  if (eErr) {
-    return NextResponse.json({ error: eErr.message, weekStart }, { status: 500 });
-  }
+  if (eErr) return NextResponse.json({ error: eErr.message }, { status: 500 });
 
   return NextResponse.json(
     {
-      weekStart,
       session: {
-        id: a.id,
-        week_start: a.week_start,
-        template_id: a.template_id,
-        template_title: templateTitle,
-        exercises: (exercises ?? []).map((ex) => {
-          const e = ex as ExerciseRow;
+        id: s.id,
+        week_start: s.week_start,
+        template_id: s.template_id,
+        template_title: s.session_templates?.title ?? null,
+        exercises: (exercises ?? []).map((row) => {
+          const ex = row as ExerciseRow;
           return {
-            id: e.id,
-            name: e.exercise_name,
-            sort_order: e.sort_order,
-            target_sets: e.target_sets,
-            target_reps: e.target_reps,
+            id: ex.id,
+            name: ex.exercise_name,
+            sort_order: ex.sort_order,
+            target_sets: ex.target_sets,
+            target_reps: ex.target_reps,
           };
         }),
       },

@@ -1,10 +1,10 @@
 import RequirePlayer from "@/components/RequirePlayer";
-import SessionsScreen from "@/components/SessionsScreen";
+import PlayerSessionsListScreen from "@/components/PlayerSessionsListScreen";
 
 export default function SessionsPage() {
   return (
     <RequirePlayer>
-      <SessionsScreen teamName="Gym Tracker" />
+      <PlayerSessionsListScreen teamName="Gym Tracker" />
     </RequirePlayer>
   );
 }

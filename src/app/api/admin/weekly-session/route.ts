@@ -15,19 +15,19 @@ type AssignmentRow = {
 type TemplateRow = {
   id: string;
   title: string;
-  exercises: unknown;
+};
+
+type TemplateExerciseRow = {
+  id: string;
+  template_id: string;
+  exercise_name: string;
+  sort_order: number;
+  target_sets: number | null;
+  target_reps: string | null;
 };
 
 function isAdmin() {
   return cookies().get("admin_authed")?.value === "1";
-}
-
-function normalizeExercises(exercises: unknown): string[] {
-  if (!Array.isArray(exercises)) return [];
-  return exercises
-    .filter((x) => typeof x === "string")
-    .map((x) => x.trim())
-    .filter((x) => x.length > 0);
 }
 
 function normalizeWeekStart(x: unknown): string {
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
   const { data: template, error: tErr } = await supabaseAdmin
     .from("session_templates")
-    .select("id, title, exercises")
+    .select("id, title")
     .eq("team_id", TEAM_ID)
     .eq("id", a.template_id)
     .maybeSingle();
@@ -70,6 +70,17 @@ export async function GET(req: NextRequest) {
   }
 
   const t = template as TemplateRow | null;
+
+  const { data: exRows, error: exErr } = await supabaseAdmin
+    .from("session_template_exercises")
+    .select("id, template_id, exercise_name, sort_order, target_sets, target_reps")
+    .eq("team_id", TEAM_ID)
+    .eq("template_id", a.template_id)
+    .order("sort_order", { ascending: true });
+
+  if (exErr) {
+    return NextResponse.json({ error: exErr.message, code: exErr.code }, { status: 500 });
+  }
 
   return NextResponse.json({
     weekStart,
@@ -82,7 +93,16 @@ export async function GET(req: NextRequest) {
         ? {
             id: t.id,
             title: t.title,
-            exercises: normalizeExercises(t.exercises),
+            exercises: (exRows ?? []).map((row) => {
+              const ex = row as TemplateExerciseRow;
+              return {
+                id: ex.id,
+                name: ex.exercise_name,
+                sort_order: ex.sort_order,
+                target_sets: ex.target_sets,
+                target_reps: ex.target_reps,
+              };
+            }),
           }
         : null,
     },

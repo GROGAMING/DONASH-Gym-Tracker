@@ -16,7 +16,7 @@ type ToastState = { message: string; type: "success" | "error" };
 type Template = {
   id: string;
   title: string;
-  exercises: string[];
+  exercises: { id: string; name: string; sort_order: number; target_sets: number | null; target_reps: string | null }[];
   created_at: string;
 };
 
@@ -30,7 +30,7 @@ type AssignmentResponse = {
     template: null | {
       id: string;
       title: string;
-      exercises: string[];
+      exercises: { id: string; name: string; sort_order: number; target_sets: number | null; target_reps: string | null }[];
     };
   };
 };
@@ -50,8 +50,9 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
   const [templatesError, setTemplatesError] = useState<string | null>(null);
 
   const [newTitle, setNewTitle] = useState("");
-  const [exerciseDraft, setExerciseDraft] = useState("");
-  const [newExercises, setNewExercises] = useState<string[]>([]);
+  const [newExercises, setNewExercises] = useState<{ name: string; target_sets: number | null; target_reps: string }[]>([
+    { name: "", target_sets: null, target_reps: "" },
+  ]);
   const [creating, setCreating] = useState(false);
 
   const [weekStartInput, setWeekStartInput] = useState(() => mondayWeekStartISO(new Date()));
@@ -119,14 +120,11 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     void fetchAssignment(normalizedWeekStart);
   }, [fetchAssignment, normalizedWeekStart]);
 
-  const addExercise = useCallback(() => {
-    const v = exerciseDraft.trim();
-    if (!v) return;
-    setNewExercises((prev) => [...prev, v]);
-    setExerciseDraft("");
-  }, [exerciseDraft]);
+  const addExerciseRow = useCallback(() => {
+    setNewExercises((prev) => [...prev, { name: "", target_sets: null, target_reps: "" }]);
+  }, []);
 
-  const removeExercise = useCallback((idx: number) => {
+  const removeExerciseRow = useCallback((idx: number) => {
     setNewExercises((prev) => prev.filter((_, i) => i !== idx));
   }, []);
 
@@ -134,7 +132,18 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     if (creating) return;
 
     const title = newTitle.trim();
-    const exercises = newExercises.map((x) => x.trim()).filter((x) => x.length > 0);
+    const exercises = newExercises
+      .map((x) => ({
+        name: x.name.trim(),
+        target_sets: typeof x.target_sets === "number" ? x.target_sets : null,
+        target_reps: x.target_reps.trim(),
+      }))
+      .filter((x) => x.name.length > 0)
+      .map((x) => ({
+        name: x.name,
+        target_sets: typeof x.target_sets === "number" && Number.isFinite(x.target_sets) ? x.target_sets : null,
+        target_reps: x.target_reps,
+      }));
 
     if (!title) {
       setToast({ message: "Add a title.", type: "error" });
@@ -164,15 +173,14 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
 
       setToast({ message: "Template created.", type: "success" });
       setNewTitle("");
-      setExerciseDraft("");
-      setNewExercises([]);
+      setNewExercises([{ name: "", target_sets: null, target_reps: "" }]);
       await fetchTemplates();
     } catch {
       setToast({ message: "Failed to create template.", type: "error" });
     } finally {
       setCreating(false);
     }
-  }, [creating, exerciseDraft, fetchTemplates, newExercises, newTitle]);
+  }, [creating, fetchTemplates, newExercises, newTitle]);
 
   const assignWeekly = useCallback(async () => {
     if (assigning) return;
@@ -240,47 +248,65 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
 
           <div className="mt-4">
             <label className="block text-xs font-semibold text-muted-foreground mb-2">Exercises</label>
-            <div className="flex gap-2">
-              <input
-                value={exerciseDraft}
-                onChange={(e) => setExerciseDraft(e.target.value)}
-                placeholder="Add exercise…"
-                className="flex-1 px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-                disabled={creating}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addExercise();
-                  }
-                }}
-              />
-              <SecondaryButton type="button" onClick={addExercise} disabled={creating}>
-                <Plus className="w-4 h-4" />
-                Add
-              </SecondaryButton>
-            </div>
-
-            {newExercises.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {newExercises.map((ex, i) => (
-                  <div key={`${ex}-${i}`} className="flex items-center justify-between gap-3 bg-secondary rounded-xl px-4 py-3">
-                    <p className="text-sm font-medium text-foreground">{i + 1}. {ex}</p>
+            <div className="mt-3 space-y-2">
+              {newExercises.map((ex, i) => (
+                <div key={`new-ex-${i}`} className="bg-secondary rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold text-muted-foreground">Exercise {i + 1}</p>
                     <button
                       type="button"
-                      onClick={() => removeExercise(i)}
+                      onClick={() => removeExerciseRow(i)}
                       className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                      disabled={creating}
+                      disabled={creating || newExercises.length <= 1}
                     >
                       Remove
                     </button>
                   </div>
-                ))}
-              </div>
-            )}
 
-            {newExercises.length === 0 && (
-              <p className="mt-3 text-xs text-muted-foreground">No exercises yet.</p>
-            )}
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      value={ex.name}
+                      onChange={(e) =>
+                        setNewExercises((prev) => prev.map((row, idx) => (idx === i ? { ...row, name: e.target.value } : row)))
+                      }
+                      placeholder="Exercise name"
+                      className="sm:col-span-2 w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+                      disabled={creating}
+                    />
+                    <input
+                      value={typeof ex.target_sets === "number" ? String(ex.target_sets) : ""}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        const n = next.trim() === "" ? null : Number(next);
+                        setNewExercises((prev) =>
+                          prev.map((row, idx) => (idx === i ? { ...row, target_sets: Number.isFinite(n as number) ? (n as number) : null } : row)),
+                        );
+                      }}
+                      placeholder="Target sets"
+                      inputMode="numeric"
+                      className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+                      disabled={creating}
+                    />
+                    <input
+                      value={ex.target_reps}
+                      onChange={(e) =>
+                        setNewExercises((prev) => prev.map((row, idx) => (idx === i ? { ...row, target_reps: e.target.value } : row)))
+                      }
+                      placeholder='Target reps (e.g. "8-10")'
+                      className="sm:col-span-3 w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+                      disabled={creating}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              <div>
+                <SecondaryButton type="button" onClick={addExerciseRow} disabled={creating}>
+                  <Plus className="w-4 h-4" />
+                  Add exercise
+                </SecondaryButton>
+              </div>
+            </div>
           </div>
 
           <div className="mt-5">
@@ -313,7 +339,12 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                   {t.exercises.length > 0 && (
                     <div className="mt-3 space-y-1">
                       {t.exercises.map((ex, i) => (
-                        <p key={`${t.id}-${i}`} className="text-xs text-muted-foreground">{i + 1}. {ex}</p>
+                        <p key={`${t.id}-${ex.id}`} className="text-xs text-muted-foreground">
+                          {i + 1}. {ex.name}
+                          {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
+                            ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
+                            : ""}
+                        </p>
                       ))}
                     </div>
                   )}
@@ -366,7 +397,12 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                 <p className="text-xs text-muted-foreground">Week starting {assignment.weekStart}</p>
                 <div className="mt-3 space-y-1">
                   {assignment.assignment.template.exercises.map((ex, i) => (
-                    <p key={`${assignment.assignment?.id}-${i}`} className="text-xs text-muted-foreground">{i + 1}. {ex}</p>
+                    <p key={`${assignment.assignment?.id}-${ex.id}`} className="text-xs text-muted-foreground">
+                      {i + 1}. {ex.name}
+                      {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
+                        ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
+                        : ""}
+                    </p>
                   ))}
                 </div>
               </div>
