@@ -1,9 +1,9 @@
 import React from "react";
-import { Camera, Trophy, Scroll, Settings } from "lucide-react";
+import { Camera, Trophy, Scroll, Settings, ClipboardList } from "lucide-react";
 
 import PageContainer from "@/components/PageContainer";
 
-type MainTab = "home" | "upload" | "leaderboard" | "doomscroll" | "admin";
+type MainTab = "home" | "upload" | "leaderboard" | "doomscroll" | "sessions" | "admin";
 
 interface MainMenuProps {
   teamName: string;
@@ -16,6 +16,14 @@ const MENU_ITEMS = [
     label: "Upload",
     description: "Take a photo and post it",
     Icon: Camera,
+    accent: false,
+    disabled: false,
+  },
+  {
+    id: "sessions" as MainTab,
+    label: "Sessions",
+    description: "See this week’s training plan",
+    Icon: ClipboardList,
     accent: false,
     disabled: false,
   },

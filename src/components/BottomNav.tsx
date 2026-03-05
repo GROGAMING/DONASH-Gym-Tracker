@@ -1,7 +1,7 @@
 import React from "react";
-import { Home, Camera, Trophy, Scroll } from "lucide-react";
+import { Home, Camera, Trophy, Scroll, ClipboardList } from "lucide-react";
 
-export type Tab = "home" | "upload" | "leaderboard" | "doomscroll" | "admin";
+export type Tab = "home" | "upload" | "sessions" | "leaderboard" | "doomscroll" | "admin";
 
 interface BottomNavProps {
   active: Tab;
@@ -11,6 +11,7 @@ interface BottomNavProps {
 const TABS: { id: Tab; label: string; Icon: React.FC<{ className?: string }> }[] = [
   { id: "home",        label: "Home",       Icon: ({ className }) => <Home   className={className} /> },
   { id: "upload",      label: "Upload",     Icon: ({ className }) => <Camera className={className} /> },
+  { id: "sessions",    label: "Sessions",   Icon: ({ className }) => <ClipboardList className={className} /> },
   { id: "leaderboard", label: "Rankings",   Icon: ({ className }) => <Trophy className={className} /> },
   { id: "doomscroll",  label: "Doom Scroll", Icon: ({ className }) => <Scroll className={className} /> },
 ];

@@ -9,6 +9,7 @@ import TeamHeader from "@/components/TeamHeader";
 function pathToTab(pathname: string): Tab {
   if (pathname === "/") return "home";
   if (pathname.startsWith("/upload")) return "upload";
+  if (pathname.startsWith("/sessions")) return "sessions";
   if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/doom-scroll")) return "doomscroll";
   return "home";
@@ -20,6 +21,8 @@ function tabToPath(tab: Tab): string {
       return "/";
     case "upload":
       return "/upload";
+    case "sessions":
+      return "/sessions";
     case "leaderboard":
       return "/leaderboard";
     case "doomscroll":
