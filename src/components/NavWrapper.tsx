@@ -5,6 +5,6 @@ import HamburgerMenu from "./HamburgerMenu";
 
 export default function NavWrapper() {
   const pathname = usePathname();
-  if (pathname === "/") return null;
+  if (pathname === "/" || pathname.startsWith("/select-player")) return null;
   return <HamburgerMenu />;
 }

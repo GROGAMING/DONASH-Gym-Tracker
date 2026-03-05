@@ -1,23 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Pencil } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
 import CameraCapture from "@/components/CameraCapture";
-import PlayerSelect from "@/components/PlayerSelect";
-import { PrimaryButton, SecondaryButton } from "@/components/GymButtons";
+import { SecondaryButton } from "@/components/GymButtons";
 import { useUploadFlow } from "@/components/UploadFlowContext";
 import ToastBanner from "@/components/ToastBanner";
 import PageContainer from "@/components/PageContainer";
 
-type Player = { id: string; name: string };
+import { useSelectedPlayer } from "@/lib/useSelectedPlayer";
 
 type ToastState = { message: string; type: "success" | "error" };
-
-type UploadStep = "select" | "capture";
 
 function initialsFromName(name: string) {
   return name
@@ -32,37 +29,11 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
   const router = useRouter();
   const { setDraft, clearDraft } = useUploadFlow();
 
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [loadingPlayers, setLoadingPlayers] = useState(true);
-
-  const playerNames = useMemo(() => players.map((p: Player) => p.name), [players]);
-
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const selectedPlayer = useMemo(() => {
-    return players.find((p: Player) => p.id === selectedPlayerId) ?? null;
-  }, [players, selectedPlayerId]);
+  const { player } = useSelectedPlayer();
+  const selectedPlayerId = player?.playerId ?? null;
+  const selectedPlayerName = player?.playerName ?? null;
 
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [step, setStep] = useState<UploadStep>("select");
-
-  useEffect(() => {
-    (async () => {
-      setLoadingPlayers(true);
-      try {
-        const res = await fetch("/api/players");
-        if (!res.ok) {
-          setToast({ message: "Failed to load players.", type: "error" });
-          return;
-        }
-        const data = (await res.json()) as Player[];
-        setPlayers(data);
-      } catch {
-        setToast({ message: "Failed to load players.", type: "error" });
-      } finally {
-        setLoadingPlayers(false);
-      }
-    })();
-  }, []);
 
   const onCapture = useCallback(
     (file: File, preview: string) => {
@@ -74,9 +45,7 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
     [clearDraft, router, selectedPlayerId, setDraft],
   );
 
-  const onRetake = useCallback(() => {
-    setStep("capture");
-  }, []);
+  const onRetake = useCallback(() => {}, []);
 
   const onUse = useCallback(() => {
   }, []);
@@ -105,45 +74,23 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
           </div>
         </div>
 
-        {!selectedPlayer && (
-          <div className="bg-card rounded-2xl shadow-card border border-border p-6 animate-fade-up">
-            <h2 className="font-display font-bold text-xl text-foreground mb-1">Who are you?</h2>
-            <p className="text-sm text-muted-foreground mb-6">Pick your name to get started.</p>
-
-            <PlayerSelect
-              players={playerNames}
-              selected={null}
-              onSelect={(name: string) => {
-                const p = players.find((x: Player) => x.name === name);
-                if (p) {
-                  setSelectedPlayerId(p.id);
-                  setStep("capture");
-                }
-              }}
-            />
-
-            <div className="mt-5">
-              <PrimaryButton disabled={!selectedPlayerId || loadingPlayers} onClick={() => setStep("capture")}>Continue →</PrimaryButton>
-            </div>
-          </div>
-        )}
-
-        {selectedPlayer && (
+        {selectedPlayerId && (
           <>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shrink-0">
-                  <span className="font-display font-bold text-xs text-primary-foreground">{initialsFromName(selectedPlayer.name)}</span>
+                  <span className="font-display font-bold text-xs text-primary-foreground">
+                    {initialsFromName(selectedPlayerName || "")}
+                  </span>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground leading-none mb-0.5">Posting as</p>
-                  <p className="font-semibold text-sm text-foreground">{selectedPlayer.name}</p>
+                  <p className="font-semibold text-sm text-foreground">{selectedPlayerName || ""}</p>
                 </div>
               </div>
               <SecondaryButton
                 onClick={() => {
-                  setSelectedPlayerId(null);
-                  setStep("select");
+                  router.push(`/select-player?next=${encodeURIComponent("/upload")}`);
                 }}
               >
                 <Pencil className="w-3 h-3" />

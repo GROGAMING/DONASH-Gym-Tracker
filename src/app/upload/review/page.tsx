@@ -1,5 +1,10 @@
 import UploadReviewScreen from "@/components/UploadReviewScreen";
+import RequirePlayer from "@/components/RequirePlayer";
 
 export default function UploadReviewPage() {
-  return <UploadReviewScreen teamName="Gym Tracker" />;
+  return (
+    <RequirePlayer>
+      <UploadReviewScreen teamName="Gym Tracker" />
+    </RequirePlayer>
+  );
 }

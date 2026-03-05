@@ -8,12 +8,16 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
+import { useSelectedPlayer } from "@/lib/useSelectedPlayer";
+
 export default function HamburgerMenu() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const lastYRef = useRef(0);
   const tickingRef = useRef(false);
+
+  const { player } = useSelectedPlayer();
 
   const links = useMemo(
     () => [
@@ -95,10 +99,30 @@ export default function HamburgerMenu() {
               <SheetTitle className="font-display font-extrabold">Gym Tracker</SheetTitle>
               <p className="text-sm text-muted-foreground">Rep Receipt</p>
             </SheetHeader>
+
+            {player?.playerName && (
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground">Selected player</p>
+                <p className="text-sm font-semibold text-foreground">{player.playerName}</p>
+              </div>
+            )}
           </div>
 
           <nav className="p-3">
             <ul className="space-y-1">
+              <li>
+                <Link
+                  href={`/select-player?next=${encodeURIComponent(pathname || "/")}`}
+                  onClick={() => setOpen(false)}
+                  className={
+                    "block rounded-xl px-4 py-3 text-sm font-semibold transition-colors " +
+                    (pathname.startsWith("/select-player") ? "bg-secondary" : "hover:bg-secondary")
+                  }
+                >
+                  Change player
+                </Link>
+              </li>
+
               {links.map((l) => (
                 <li key={l.href}>
                   <Link
