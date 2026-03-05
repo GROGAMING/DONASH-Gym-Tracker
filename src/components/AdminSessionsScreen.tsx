@@ -167,6 +167,10 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
 
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.error("Create template failed", { status: res.status, body });
+        }
         setToast({ message: body?.error || "Failed to create template.", type: "error" });
         return;
       }
@@ -175,7 +179,11 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       setNewTitle("");
       setNewExercises([{ name: "", target_sets: null, target_reps: "" }]);
       await fetchTemplates();
-    } catch {
+    } catch (err) {
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.error("Create template exception", err);
+      }
       setToast({ message: "Failed to create template.", type: "error" });
     } finally {
       setCreating(false);
