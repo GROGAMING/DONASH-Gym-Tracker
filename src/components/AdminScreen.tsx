@@ -30,6 +30,9 @@ export default function AdminScreen({ teamName, authed }: { teamName: string; au
           <div className="bg-card border border-border rounded-2xl shadow-card p-4">
             <p className="text-xs text-muted-foreground mb-3 text-center">Quick links</p>
             <div className="flex flex-col gap-2">
+              <Link href="/admin/sessions" className="text-sm font-semibold text-foreground hover:underline">
+                Sessions
+              </Link>
               <Link href="/admin/uploads" className="text-sm font-semibold text-foreground hover:underline">
                 View uploads
               </Link>
