@@ -56,11 +56,11 @@ const FeedItem: React.FC<FeedItemProps> = ({ post, index }) => {
             </button>
           </DialogTrigger>
           <DialogContent className="p-0 bg-transparent border-0 shadow-none w-[95vw] max-w-2xl">
-            <div className="relative w-full max-h-[85vh] overflow-hidden rounded-xl bg-black">
+            <div className="relative w-full max-h-[80dvh] overflow-hidden rounded-xl bg-black">
               <img
                 src={post.image}
                 alt={`${post.playerName}'s gym proof`}
-                className="w-full h-auto max-h-[85vh] object-contain"
+                className="w-full h-auto max-h-[80dvh] object-contain"
               />
             </div>
           </DialogContent>

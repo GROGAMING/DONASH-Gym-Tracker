@@ -10,6 +10,7 @@ import FeedList from "@/components/FeedList";
 import { SecondaryButton } from "@/components/GymButtons";
 import ToastBanner from "@/components/ToastBanner";
 import type { FeedPost } from "@/components/FeedItem";
+import PageContainer from "@/components/PageContainer";
 
 type Item = {
   id: string;
@@ -133,12 +134,12 @@ export default function DoomScrollScreen({ teamName }: { teamName: string }) {
     <AppShell teamName={teamName}>
       {toast && <ToastBanner message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-      <div className="max-w-sm mx-auto animate-fade-up">
-        <div className="px-4 pt-5 mb-2">
+      <div className="w-full mx-auto max-w-screen-sm animate-fade-up">
+        <PageContainer className="pt-5 sm:pt-6 mb-2">
           <BackButton onClick={onBack} />
-        </div>
+        </PageContainer>
 
-        <div className="px-4 pt-2 pb-3">
+        <PageContainer className="pt-2 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-card border border-border flex items-center justify-center shadow-card">
               <ScrollText className="w-4.5 h-4.5 text-foreground" strokeWidth={2} />
@@ -159,12 +160,12 @@ export default function DoomScrollScreen({ teamName }: { teamName: string }) {
               </p>
             </div>
           )}
-        </div>
+        </PageContainer>
 
         <FeedList posts={posts} loading={loading} />
 
         {items.length > 0 && items.length < 40 && items.length % 10 === 0 && (
-          <div className="px-4 pb-6">
+          <PageContainer className="pb-6">
             <button
               type="button"
               onClick={loadMore}
@@ -179,7 +180,7 @@ export default function DoomScrollScreen({ teamName }: { teamName: string }) {
             >
               {loadingMore ? "Loading…" : "Load more"}
             </button>
-          </div>
+          </PageContainer>
         )}
       </div>
     </AppShell>

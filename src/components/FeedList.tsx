@@ -3,6 +3,8 @@ import FeedItem, { FeedPost } from "./FeedItem";
 import SkeletonLoader from "./SkeletonLoader";
 import { Dumbbell, RefreshCw } from "lucide-react";
 
+import PageContainer from "@/components/PageContainer";
+
 interface FeedListProps {
   posts: FeedPost[];
   loading: boolean;
@@ -11,27 +13,29 @@ interface FeedListProps {
 const FeedList: React.FC<FeedListProps> = ({ posts, loading }) => {
   if (loading) {
     return (
-      <div className="flex flex-col gap-4 px-4 pt-4">
-        {[0, 1, 2].map((i) => (
-          <SkeletonLoader key={i} />
-        ))}
-      </div>
+      <PageContainer className="pt-4">
+        <div className="flex flex-col gap-4">
+          {[0, 1, 2].map((i) => (
+            <SkeletonLoader key={i} />
+          ))}
+        </div>
+      </PageContainer>
     );
   }
 
   if (posts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 px-8 text-center animate-fade-up">
-        <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-          <Dumbbell className="w-8 h-8 text-muted-foreground" />
+      <PageContainer className="py-16 sm:py-20">
+        <div className="flex flex-col items-center justify-center text-center animate-fade-up">
+          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+            <Dumbbell className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <h3 className="font-display font-bold text-lg text-foreground mb-2">No posts yet</h3>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Be the first to upload — hit the gym and prove it to your team.
+          </p>
         </div>
-        <h3 className="font-display font-bold text-lg text-foreground mb-2">
-          No posts yet
-        </h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Be the first to upload — hit the gym and prove it to your team.
-        </p>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -43,11 +47,13 @@ const FeedList: React.FC<FeedListProps> = ({ posts, loading }) => {
         <span className="text-xs text-muted-foreground/60">Pull to refresh</span>
       </div>
 
-      <div className="flex flex-col gap-4 px-4 pb-4">
-        {posts.map((post, i) => (
-          <FeedItem key={post.id} post={post} index={i} />
-        ))}
-      </div>
+      <PageContainer className="pb-4">
+        <div className="flex flex-col gap-4">
+          {posts.map((post, i) => (
+            <FeedItem key={post.id} post={post} index={i} />
+          ))}
+        </div>
+      </PageContainer>
 
       <div className="py-8 text-center">
         <p className="text-xs text-muted-foreground">

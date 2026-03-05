@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Trophy, Medal } from "lucide-react";
 
+import PageContainer from "@/components/PageContainer";
+
 interface LeaderEntry {
   rank: number;
   name: string;
@@ -127,7 +129,7 @@ const Leaderboard: React.FC = () => {
   const data = tab === "weekly" ? WEEKLY_DATA : ALLTIME_DATA;
 
   return (
-    <div className="max-w-sm mx-auto px-4 pt-5 pb-4 animate-fade-up">
+    <PageContainer className="pt-5 sm:pt-6 pb-4 sm:pb-6 animate-fade-up">
       {/* Section header */}
       <div className="flex items-center gap-2.5 mb-5">
         <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-button">
@@ -183,7 +185,7 @@ const Leaderboard: React.FC = () => {
           </p>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 };
 

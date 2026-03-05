@@ -27,7 +27,7 @@ const ToastBanner: React.FC<ToastBannerProps> = ({
   return (
     <div
       className={`
-        fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm
+        fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-screen-sm
         flex items-center gap-3 px-4 py-3 rounded-xl shadow-card-hover border
         ${type === "success"
           ? "bg-success-muted border-success/30"

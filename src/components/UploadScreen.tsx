@@ -11,6 +11,7 @@ import PlayerSelect from "@/components/PlayerSelect";
 import { PrimaryButton, SecondaryButton } from "@/components/GymButtons";
 import { useUploadFlow } from "@/components/UploadFlowContext";
 import ToastBanner from "@/components/ToastBanner";
+import PageContainer from "@/components/PageContainer";
 
 type Player = { id: string; name: string };
 
@@ -89,7 +90,7 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
 
       {toast && <ToastBanner message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-      <div className="max-w-sm mx-auto px-4 pt-5 pb-4 animate-fade-up">
+      <PageContainer className="pt-5 sm:pt-6 pb-4 sm:pb-6 animate-fade-up">
         <div className="mb-4">
           <BackButton onClick={onBack} />
         </div>
@@ -160,7 +161,7 @@ export default function UploadScreen({ teamName }: { teamName: string }) {
             />
           </>
         )}
-      </div>
+      </PageContainer>
     </AppShell>
   );
 }

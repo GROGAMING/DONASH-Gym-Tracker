@@ -10,6 +10,7 @@ import ToastBanner from "@/components/ToastBanner";
 import { PrimaryButton, SecondaryButton } from "@/components/GymButtons";
 import { Textarea } from "@/components/ui/textarea";
 import { useUploadFlow } from "@/components/UploadFlowContext";
+import PageContainer from "@/components/PageContainer";
 
 type ToastState = { message: string; type: "success" | "error" };
 
@@ -135,7 +136,7 @@ export default function UploadReviewScreen({ teamName }: { teamName: string }) {
   if (!draft) {
     return (
       <AppShell teamName={teamName} showBottomNav={false}>
-        <div className="max-w-sm mx-auto px-4 pt-5 pb-4 animate-fade-up">
+        <PageContainer className="pt-5 sm:pt-6 pb-4 sm:pb-6 animate-fade-up">
           <div className="mb-4">
             <BackButton onClick={onBack} />
           </div>
@@ -148,7 +149,7 @@ export default function UploadReviewScreen({ teamName }: { teamName: string }) {
             <p className="text-sm text-muted-foreground mb-5">Please retake your photo to post it.</p>
             <PrimaryButton onClick={() => router.push("/upload")}>Retake photo</PrimaryButton>
           </div>
-        </div>
+        </PageContainer>
       </AppShell>
     );
   }
@@ -157,7 +158,7 @@ export default function UploadReviewScreen({ teamName }: { teamName: string }) {
     <AppShell teamName={teamName} showBottomNav={false}>
       {toast && <ToastBanner message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-      <div className="max-w-sm mx-auto px-4 pt-5 pb-28 animate-fade-up">
+      <PageContainer className="pt-5 sm:pt-6 pb-28 animate-fade-up">
         <div className="mb-4">
           <BackButton onClick={onBack} label="Back" />
         </div>
@@ -217,10 +218,10 @@ export default function UploadReviewScreen({ teamName }: { teamName: string }) {
             </div>
           </div>
         )}
-      </div>
+      </PageContainer>
 
       <div className="fixed inset-x-0 bottom-0 z-40 bg-card/95 backdrop-blur-sm border-t border-border safe-bottom">
-        <div className="max-w-sm mx-auto px-4 py-3">
+        <div className="max-w-screen-sm mx-auto px-4 sm:px-6 py-3">
           <div className="flex gap-3">
             <SecondaryButton onClick={onRetake} className="flex-1 py-3 justify-center gap-2" disabled={uploading}>
               <RefreshCcw className="w-3.5 h-3.5" />

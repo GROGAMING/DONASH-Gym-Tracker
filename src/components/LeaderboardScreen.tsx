@@ -7,6 +7,7 @@ import { Trophy } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
 import MetQuotaTick from "@/components/MetQuotaTick";
+import PageContainer from "@/components/PageContainer";
 import { mondayWeekStartISO } from "@/lib/week";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -149,7 +150,7 @@ export default function LeaderboardScreen({ teamName }: { teamName: string }) {
 
   return (
     <AppShell teamName={teamName}>
-      <div className="max-w-sm mx-auto px-4 pt-5 pb-4 animate-fade-up">
+      <PageContainer className="pt-5 sm:pt-6 pb-4 sm:pb-6 animate-fade-up">
         <div className="mb-4">
           <BackButton onClick={onBack} />
         </div>
@@ -197,7 +198,7 @@ export default function LeaderboardScreen({ teamName }: { teamName: string }) {
         <div className="py-6 text-center">
           <p className="text-xs text-muted-foreground/60">{data.length} athletes ranked</p>
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   );
 }

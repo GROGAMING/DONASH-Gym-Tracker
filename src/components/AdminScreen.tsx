@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import AppShell from "@/components/AppShell";
 import AdminPlaceholder from "@/components/AdminPlaceholder";
+import PageContainer from "@/components/PageContainer";
 
 export default function AdminScreen({ teamName, authed }: { teamName: string; authed: boolean }) {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function AdminScreen({ teamName, authed }: { teamName: string; au
     <AppShell teamName={teamName}>
       <AdminPlaceholder onBack={onBack} />
 
-      <div className="max-w-sm mx-auto px-4 pb-8">
+      <PageContainer className="pb-8">
         {!authed ? (
           <div className="text-center">
             <Link href="/admin/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
@@ -38,7 +39,7 @@ export default function AdminScreen({ teamName, authed }: { teamName: string; au
             </div>
           </div>
         )}
-      </div>
+      </PageContainer>
     </AppShell>
   );
 }

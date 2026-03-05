@@ -1,12 +1,14 @@
 import React from "react";
 import { Settings, ArrowLeft } from "lucide-react";
 
+import PageContainer from "@/components/PageContainer";
+
 interface AdminPlaceholderProps {
   onBack: () => void;
 }
 
 const AdminPlaceholder: React.FC<AdminPlaceholderProps> = ({ onBack }) => (
-  <div className="max-w-sm mx-auto px-4 pt-5 flex flex-col items-center justify-center min-h-[60vh] animate-fade-up">
+  <PageContainer className="pt-5 sm:pt-6 flex flex-col items-center justify-center min-h-[60dvh] animate-fade-up">
     <div className="w-20 h-20 rounded-3xl bg-muted flex items-center justify-center mb-6 shadow-card">
       <Settings className="w-9 h-9 text-muted-foreground" strokeWidth={1.5} />
     </div>
@@ -28,7 +30,7 @@ const AdminPlaceholder: React.FC<AdminPlaceholderProps> = ({ onBack }) => (
       <ArrowLeft className="w-4 h-4" />
       Back to Home
     </button>
-  </div>
+  </PageContainer>
 );
 
 export default AdminPlaceholder;

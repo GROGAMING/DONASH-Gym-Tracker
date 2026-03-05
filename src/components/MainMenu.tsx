@@ -1,6 +1,8 @@
 import React from "react";
 import { Camera, Trophy, Scroll, Settings } from "lucide-react";
 
+import PageContainer from "@/components/PageContainer";
+
 type MainTab = "home" | "upload" | "leaderboard" | "doomscroll" | "admin";
 
 interface MainMenuProps {
@@ -43,17 +45,17 @@ const MENU_ITEMS = [
 
 const MainMenu: React.FC<MainMenuProps> = ({ onNavigate }) => {
   return (
-    <div className="max-w-sm mx-auto px-4 pt-5 pb-4 animate-fade-up">
-      <div className="mb-6">
-        <h2 className="font-display font-extrabold text-2xl text-foreground leading-tight">
+    <PageContainer className="pt-5 sm:pt-6 pb-4 sm:pb-6 animate-fade-up">
+      <div className="mb-6 sm:mb-7">
+        <h2 className="font-display font-extrabold text-2xl sm:text-3xl text-foreground leading-tight">
           What's the move?
         </h2>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">
           Choose an option below to get started.
         </p>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:gap-4">
         {MENU_ITEMS.map(({ id, label, description, Icon, accent, disabled }, i) => (
           <button
             key={id + label}
@@ -61,7 +63,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ onNavigate }) => {
             disabled={disabled}
             onClick={() => !disabled && onNavigate(id)}
             className={`
-              w-full flex items-center gap-4 px-5 py-5 rounded-2xl border text-left
+              w-full flex items-center gap-4 px-5 py-5 sm:py-6 rounded-2xl border text-left
               transition-all duration-150 active-scale shadow-card
               animate-fade-up
               ${disabled
@@ -75,7 +77,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ onNavigate }) => {
           >
             <div
               className={`
-                w-11 h-11 rounded-xl flex items-center justify-center shrink-0
+                w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0
                 ${accent && !disabled ? "bg-primary-foreground/15" : "bg-secondary"}
               `}
             >
@@ -86,7 +88,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ onNavigate }) => {
             </div>
             <div className="flex-1 min-w-0">
               <p
-                className={`font-display font-bold text-[15px] leading-tight ${
+                className={`font-display font-bold text-[15px] sm:text-base leading-tight ${
                   accent && !disabled ? "text-primary-foreground" : "text-foreground"
                 }`}
               >
@@ -98,7 +100,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ onNavigate }) => {
                 )}
               </p>
               <p
-                className={`text-xs mt-0.5 leading-snug ${
+                className={`text-xs sm:text-sm mt-0.5 leading-snug ${
                   accent && !disabled ? "text-primary-foreground/70" : "text-muted-foreground"
                 }`}
               >
@@ -114,7 +116,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ onNavigate }) => {
           </button>
         ))}
       </div>
-    </div>
+    </PageContainer>
   );
 };
 
