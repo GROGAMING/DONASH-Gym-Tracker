@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Plus, Save } from "lucide-react";
+import { ClipboardList, Plus, Save, Trash2 } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
@@ -67,6 +67,9 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [assigning, setAssigning] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<Template | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const onBack = useCallback(() => {
     router.push("/admin");
@@ -191,6 +194,29 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       setCreating(false);
     }
   }, [creating, fetchTemplates, newExercises, newTitle]);
+
+  const deleteTemplate = useCallback(async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/admin/session-templates/${encodeURIComponent(deleteTarget.id)}`, {
+        method: "DELETE",
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setToast({ message: body?.error || "Failed to delete template.", type: "error" });
+        return;
+      }
+      setToast({ message: "Template deleted.", type: "success" });
+      setDeleteTarget(null);
+      await fetchTemplates();
+    } catch {
+      setToast({ message: "Failed to delete template.", type: "error" });
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteTarget, deleting, fetchTemplates]);
 
   const assignWeekly = useCallback(async () => {
     if (assigning) return;
@@ -346,6 +372,14 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                       <p className="text-sm font-semibold text-foreground">{t.title}</p>
                       <p className="text-xs text-muted-foreground">{t.exercises.length} exercise{t.exercises.length === 1 ? "" : "s"}</p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(t)}
+                      className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
                   </div>
                   {t.exercises.length > 0 && (
                     <div className="mt-3 space-y-1">
@@ -429,6 +463,37 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
           </div>
         </div>
       </PageContainer>
+
+      {/* Delete confirm modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-2xl shadow-card w-full max-w-sm p-6">
+            <h3 className="font-display font-bold text-lg text-foreground mb-2">Delete template?</h3>
+            <p className="text-sm text-muted-foreground mb-1">
+              <span className="font-semibold text-foreground">{deleteTarget.title}</span>
+            </p>
+            <p className="text-xs text-muted-foreground mb-6">This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="flex-1 px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm font-semibold hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteTemplate()}
+                disabled={deleting}
+                className="flex-1 px-4 py-3 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

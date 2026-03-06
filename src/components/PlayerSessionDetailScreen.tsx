@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
@@ -45,28 +45,42 @@ type LastTimeResponse = {
 
 type SaveState = "idle" | "saving" | "saved";
 
+type LocalDraft = {
+  sets: Record<string, { weight: string; reps: string }[]>;
+  collapsed: Record<string, boolean>;
+};
+
 function newSetRow(): SetRow {
   return { id: `${Date.now()}-${Math.random()}`, weight: "", reps: "" };
 }
 
+function makeDefaultRows(ex: ApiExercise): SetRow[] {
+  const count = typeof ex.target_sets === "number" && ex.target_sets > 0 ? ex.target_sets : 1;
+  return Array.from({ length: count }, () => newSetRow());
+}
+
 function localKey(playerId: string, weeklySessionId: string) {
-  return `draft:${playerId}:${weeklySessionId}`;
+  return `draft2:${playerId}:${weeklySessionId}`;
 }
 
-function serializeSets(setsByExercise: Record<string, SetRow[]>): Record<string, { weight: string; reps: string }[]> {
-  const out: Record<string, { weight: string; reps: string }[]> = {};
-  for (const [exId, rows] of Object.entries(setsByExercise)) {
-    out[exId] = rows.map((r) => ({ weight: r.weight, reps: r.reps }));
-  }
-  return out;
-}
+function buildSummary(rows: SetRow[]): string {
+  const filled = rows.filter((r) => r.weight.trim() !== "" || r.reps.trim() !== "");
+  if (filled.length === 0) return `${rows.length} set${rows.length !== 1 ? "s" : ""} logged`;
 
-function deserializeSets(raw: Record<string, { weight: string; reps: string }[]>): Record<string, SetRow[]> {
-  const out: Record<string, SetRow[]> = {};
-  for (const [exId, rows] of Object.entries(raw)) {
-    out[exId] = rows.map((r) => ({ id: `${Date.now()}-${Math.random()}`, weight: r.weight, reps: r.reps }));
-  }
-  return out;
+  const weights = filled.map((r) => r.weight.trim()).filter(Boolean);
+  const repsArr = filled.map((r) => r.reps.trim()).filter(Boolean);
+
+  const uniqueWeights = [...new Set(weights)];
+  const uniqueReps = [...new Set(repsArr)];
+
+  const repsStr = uniqueReps.length === 1 ? uniqueReps[0] : repsArr.join(",");
+  const weightStr = uniqueWeights.length === 0
+    ? ""
+    : uniqueWeights.length === 1
+    ? `@ ${uniqueWeights[0]}kg`
+    : `@ ${uniqueWeights.join("/")}kg`;
+
+  return `${filled.length}×${repsStr}${weightStr ? " " + weightStr : ""}`.trim();
 }
 
 export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }: { teamName: string; weeklySessionId: string }) {
@@ -82,7 +96,7 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
   const [setsByExercise, setSetsByExercise] = useState<Record<string, SetRow[]>>({});
-  const [completedExercise, setCompletedExercise] = useState<Record<string, boolean>>({});
+  const [collapsedExercise, setCollapsedExercise] = useState<Record<string, boolean>>({});
   const [lastTime, setLastTime] = useState<LastTimeResponse | null>(null);
 
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,41 +129,66 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
     })();
   }, [data?.session?.template_id, playerId]);
 
-  // Restore draft on load (Supabase first, fallback to localStorage)
+  // Restore draft on load: Supabase first, fallback to localStorage, fallback to prefilled defaults
   useEffect(() => {
     if (!data?.session || !playerId || !isFirstLoad.current) return;
     isFirstLoad.current = false;
 
-    const key = localKey(playerId, weeklySessionId);
+    const exercises = data.session.exercises;
 
     (async () => {
+      // Try Supabase draft
       try {
         const res = await fetch(`/api/player-sessions/draft?weeklySessionId=${encodeURIComponent(weeklySessionId)}&playerId=${encodeURIComponent(playerId)}`);
         if (res.ok) {
           const body = (await res.json()) as { draft: { id: string; sets: { exercise_id: string | null; exercise_name: string; set_number: number; reps: number | null; weight: number | null }[] } | null };
           if (body.draft && body.draft.sets.length > 0) {
             const restored: Record<string, SetRow[]> = {};
+            for (const ex of exercises) {
+              restored[ex.id] = makeDefaultRows(ex);
+            }
             for (const s of body.draft.sets) {
-              const exId = data.session.exercises.find((e) => e.name === s.exercise_name || e.id === s.exercise_id)?.id;
-              if (!exId) continue;
-              if (!restored[exId]) restored[exId] = [];
+              const ex = exercises.find((e) => e.name === s.exercise_name || e.id === s.exercise_id);
+              if (!ex) continue;
               const idx = s.set_number - 1;
-              while (restored[exId].length <= idx) restored[exId].push(newSetRow());
-              restored[exId][idx] = { id: `${Date.now()}-${Math.random()}`, weight: s.weight != null ? String(s.weight) : "", reps: s.reps != null ? String(s.reps) : "" };
+              if (idx < 0) continue;
+              while (restored[ex.id].length <= idx) restored[ex.id].push(newSetRow());
+              restored[ex.id][idx] = { id: `${Date.now()}-${Math.random()}`, weight: s.weight != null ? String(s.weight) : "", reps: s.reps != null ? String(s.reps) : "" };
             }
             setSetsByExercise(restored);
             return;
           }
         }
-      } catch { /* fall through to localStorage */ }
+      } catch { /* fall through */ }
 
+      // Try localStorage
       try {
-        const raw = localStorage.getItem(key);
+        const raw = localStorage.getItem(localKey(playerId, weeklySessionId));
         if (raw) {
-          const parsed = JSON.parse(raw) as Record<string, { weight: string; reps: string }[]>;
-          setSetsByExercise(deserializeSets(parsed));
+          const parsed = JSON.parse(raw) as LocalDraft;
+          if (parsed.sets) {
+            const restored: Record<string, SetRow[]> = {};
+            for (const ex of exercises) {
+              const saved = parsed.sets[ex.id];
+              if (saved && saved.length > 0) {
+                restored[ex.id] = saved.map((r) => ({ id: `${Date.now()}-${Math.random()}`, weight: r.weight, reps: r.reps }));
+              } else {
+                restored[ex.id] = makeDefaultRows(ex);
+              }
+            }
+            setSetsByExercise(restored);
+            if (parsed.collapsed) setCollapsedExercise(parsed.collapsed);
+            return;
+          }
         }
       } catch { /* ignore */ }
+
+      // Fallback: prefill from target_sets
+      const defaults: Record<string, SetRow[]> = {};
+      for (const ex of exercises) {
+        defaults[ex.id] = makeDefaultRows(ex);
+      }
+      setSetsByExercise(defaults);
     })();
   }, [data, playerId, weeklySessionId]);
 
@@ -167,12 +206,20 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
     return payload;
   }, [setsByExercise]);
 
-  const triggerAutosave = useCallback((sets: Record<string, SetRow[]>) => {
+  const triggerAutosave = useCallback((
+    sets: Record<string, SetRow[]>,
+    collapsed: Record<string, boolean>,
+  ) => {
     if (!playerId || !data?.session) return;
-    const key = localKey(playerId, weeklySessionId);
 
     // localStorage immediately
-    try { localStorage.setItem(key, JSON.stringify(serializeSets(sets))); } catch { /* ignore */ }
+    try {
+      const draft: LocalDraft = {
+        sets: Object.fromEntries(Object.entries(sets).map(([k, v]) => [k, v.map((r) => ({ weight: r.weight, reps: r.reps }))])),
+        collapsed,
+      };
+      localStorage.setItem(localKey(playerId, weeklySessionId), JSON.stringify(draft));
+    } catch { /* ignore */ }
 
     // Supabase debounced
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -208,15 +255,19 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
 
   const addSet = useCallback((exerciseId: string) => {
     setSetsByExercise((prev) => {
-      const next = { ...prev, [exerciseId]: [...(prev[exerciseId] ?? [newSetRow()]), newSetRow()] };
-      triggerAutosave(next);
+      const next = { ...prev, [exerciseId]: [...(prev[exerciseId] ?? makeDefaultRows({ id: exerciseId, name: "", sort_order: 0, target_sets: null, target_reps: null })), newSetRow()] };
+      triggerAutosave(next, collapsedExercise);
       return next;
     });
-  }, [triggerAutosave]);
+  }, [collapsedExercise, triggerAutosave]);
 
-  const toggleCompleted = useCallback((exerciseId: string) => {
-    setCompletedExercise((prev) => ({ ...prev, [exerciseId]: !prev[exerciseId] }));
-  }, []);
+  const toggleCollapsed = useCallback((exerciseId: string) => {
+    setCollapsedExercise((prev) => {
+      const next = { ...prev, [exerciseId]: !prev[exerciseId] };
+      triggerAutosave(setsByExercise, next);
+      return next;
+    });
+  }, [setsByExercise, triggerAutosave]);
 
   const updateSet = useCallback((exerciseId: string, setId: string, patch: Partial<SetRow>) => {
     setSetsByExercise((prev) => {
@@ -224,10 +275,10 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
         ...prev,
         [exerciseId]: (prev[exerciseId] ?? []).map((s) => (s.id === setId ? { ...s, ...patch } : s)),
       };
-      triggerAutosave(next);
+      triggerAutosave(next, collapsedExercise);
       return next;
     });
-  }, [triggerAutosave]);
+  }, [collapsedExercise, triggerAutosave]);
 
   const onLog = useCallback(async () => {
     if (logging) return;
@@ -248,7 +299,6 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) { setToast({ message: body?.error || "Failed to log session.", type: "error" }); return; }
 
-      // Clear draft from localStorage after successful log
       try { localStorage.removeItem(localKey(playerId, weeklySessionId)); } catch { /* ignore */ }
       setToast({ message: "Session logged!", type: "success" });
       setTimeout(() => router.push("/sessions/history"), 800);
@@ -301,60 +351,90 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
 
             <div className="space-y-3">
               {data.session.exercises.map((ex) => {
-                const rows = setsByExercise[ex.id] ?? [newSetRow()];
-                const isDone = completedExercise[ex.id] === true;
+                const rows = setsByExercise[ex.id] ?? makeDefaultRows(ex);
+                const isCollapsed = collapsedExercise[ex.id] === true;
                 const last = lastTime?.last?.[ex.id] ?? [];
+                const summary = buildSummary(rows);
 
                 return (
-                  <div key={ex.id} className="bg-card border border-border rounded-2xl shadow-card p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{ex.name}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Target: {typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x {ex.target_reps || "—"}
-                        </p>
-                        {last.length > 0 && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Last time: {last.slice().sort((a, b) => a.set_number - b.set_number).map((s) => `${s.weight ?? "—"} x ${s.reps ?? "—"}`).join(", ")}
+                  <div key={ex.id} className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
+                    {/* Header — always visible */}
+                    <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{ex.name}</p>
+                        {isCollapsed ? (
+                          <p className="text-xs text-muted-foreground mt-0.5">{summary}</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Target: {typeof ex.target_sets === "number" ? ex.target_sets : "—"} × {ex.target_reps || "—"}
                           </p>
                         )}
                       </div>
                       <button
                         type="button"
-                        onClick={() => toggleCompleted(ex.id)}
-                        className={`inline-flex items-center gap-2 text-xs font-semibold transition-colors ${isDone ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        onClick={() => toggleCollapsed(ex.id)}
+                        className="shrink-0 flex items-center gap-1.5 text-xs font-semibold transition-colors text-foreground"
                       >
-                        <CheckCircle2 className={`w-4 h-4 ${isDone ? "text-primary" : "text-muted-foreground"}`} />
-                        {isDone ? "Done" : "Mark done"}
+                        {isCollapsed ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-primary" />
+                            <span>Done</span>
+                            <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">Mark done</span>
+                          </>
+                        )}
                       </button>
                     </div>
 
-                    <div className="mt-4 space-y-2">
-                      {rows.map((s, idx) => (
-                        <div key={s.id} className="grid grid-cols-12 gap-2">
-                          <div className="col-span-2 flex items-center">
-                            <p className="text-xs font-semibold text-muted-foreground">{idx + 1}</p>
+                    {/* Collapsible body */}
+                    {!isCollapsed && (
+                      <div className="px-5 pb-5">
+                        {last.length > 0 && (
+                          <p className="text-xs text-muted-foreground mb-3">
+                            Last time: {last.slice().sort((a, b) => a.set_number - b.set_number).map((s) => `${s.weight ?? "—"} × ${s.reps ?? "—"}`).join(", ")}
+                          </p>
+                        )}
+
+                        <div className="space-y-2">
+                          {/* Column headers */}
+                          <div className="grid grid-cols-12 gap-2 mb-1">
+                            <div className="col-span-2" />
+                            <p className="col-span-5 text-xs font-semibold text-muted-foreground px-1">kg</p>
+                            <p className="col-span-5 text-xs font-semibold text-muted-foreground px-1">reps</p>
                           </div>
-                          <input
-                            value={s.weight}
-                            onChange={(e) => updateSet(ex.id, s.id, { weight: e.target.value })}
-                            placeholder="kg"
-                            inputMode="decimal"
-                            className="col-span-5 px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-                          />
-                          <input
-                            value={s.reps}
-                            onChange={(e) => updateSet(ex.id, s.id, { reps: e.target.value })}
-                            placeholder="reps"
-                            inputMode="numeric"
-                            className="col-span-5 px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-                          />
+
+                          {rows.map((s, idx) => (
+                            <div key={s.id} className="grid grid-cols-12 gap-2 items-center">
+                              <div className="col-span-2 flex items-center">
+                                <p className="text-xs font-semibold text-muted-foreground">{idx + 1}</p>
+                              </div>
+                              <input
+                                value={s.weight}
+                                onChange={(e) => updateSet(ex.id, s.id, { weight: e.target.value })}
+                                placeholder="—"
+                                inputMode="decimal"
+                                className="col-span-5 px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none focus:border-ring"
+                              />
+                              <input
+                                value={s.reps}
+                                onChange={(e) => updateSet(ex.id, s.id, { reps: e.target.value })}
+                                placeholder="—"
+                                inputMode="numeric"
+                                className="col-span-5 px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none focus:border-ring"
+                              />
+                            </div>
+                          ))}
+
+                          <div className="pt-1">
+                            <SecondaryButton type="button" onClick={() => addSet(ex.id)}>+ Add set</SecondaryButton>
+                          </div>
                         </div>
-                      ))}
-                      <div className="flex justify-between gap-3">
-                        <SecondaryButton type="button" onClick={() => addSet(ex.id)}>Add set</SecondaryButton>
                       </div>
-                    </div>
+                    )}
                   </div>
                 );
               })}

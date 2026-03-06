@@ -13,6 +13,16 @@ import { useSelectedPlayer } from "@/lib/useSelectedPlayer";
 
 type ToastState = { message: string; type: "success" | "error" };
 
+type SetEntry = {
+  id: string;
+  exercise_id: string | null;
+  exercise_name: string;
+  set_number: number;
+  reps: number | null;
+  weight: number | null;
+  created_at: string;
+};
+
 type ApiResponse = {
   logs: {
     id: string;
@@ -24,18 +34,43 @@ type ApiResponse = {
       template_id: string;
       template_title: string | null;
     };
-    sets: {
-      id: string;
-      exercise_id: string | null;
-      exercise_name: string;
-      set_number: number;
-      reps: number | null;
-      weight: number | null;
-      created_at: string;
-    }[];
+    sets: SetEntry[];
   }[];
   error?: string;
 };
+
+function formatLoggedDate(completed_at: string | null, created_at: string): string {
+  const raw = completed_at ?? created_at;
+  try {
+    return `Logged ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(raw))}`;
+  } catch {
+    return `Logged ${raw.slice(0, 10)}`;
+  }
+}
+
+function compressExerciseSets(sets: SetEntry[]): string {
+  if (sets.length === 0) return "No sets logged";
+  const sorted = sets.slice().sort((a, b) => a.set_number - b.set_number);
+  const weights = sorted.map((s) => (s.weight != null ? String(s.weight) : "")).filter(Boolean);
+  const repsArr = sorted.map((s) => (s.reps != null ? String(s.reps) : "")).filter(Boolean);
+  const uniqueWeights = [...new Set(weights)];
+  const uniqueReps = [...new Set(repsArr)];
+  const repsStr = uniqueReps.length === 0 ? "—" : uniqueReps.length === 1 ? uniqueReps[0] : repsArr.join(",");
+  const weightStr =
+    uniqueWeights.length === 0 ? "" :
+    uniqueWeights.length === 1 ? ` @ ${uniqueWeights[0]}kg` :
+    ` @ ${uniqueWeights.join("/")}kg`;
+  return `${sorted.length}×${repsStr}${weightStr}`;
+}
+
+function groupByExercise(sets: SetEntry[]): { name: string; summary: string }[] {
+  const map = new Map<string, SetEntry[]>();
+  for (const s of sets) {
+    if (!map.has(s.exercise_name)) map.set(s.exercise_name, []);
+    map.get(s.exercise_name)!.push(s);
+  }
+  return Array.from(map.entries()).map(([name, rows]) => ({ name, summary: compressExerciseSets(rows) }));
+}
 
 export default function PlayerSessionHistoryScreen({ teamName }: { teamName: string }) {
   const router = useRouter();
@@ -49,32 +84,21 @@ export default function PlayerSessionHistoryScreen({ teamName }: { teamName: str
 
   const load = useCallback(async () => {
     if (!playerId) return;
-
     setLoading(true);
     setError(null);
-
     try {
       const res = await fetch(`/api/player-sessions/history?playerId=${encodeURIComponent(playerId)}`);
       const body = (await res.json().catch(() => null)) as ApiResponse | null;
-
-      if (!res.ok) {
-        setError(body?.error || "Failed to load history.");
-        setData(null);
-        return;
-      }
-
+      if (!res.ok) { setError(body?.error || "Failed to load history."); setData(null); return; }
       setData(body);
     } catch {
-      setError("Failed to load history.");
-      setData(null);
+      setError("Failed to load history."); setData(null);
     } finally {
       setLoading(false);
     }
   }, [playerId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const logs = useMemo(() => data?.logs ?? [], [data?.logs]);
 
@@ -111,7 +135,7 @@ export default function PlayerSessionHistoryScreen({ teamName }: { teamName: str
             <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center mb-4">
               <AlertCircle className="w-5 h-5 text-foreground" />
             </div>
-            <h3 className="font-display font-bold text-lg text-foreground mb-1">Couldn’t load history</h3>
+            <h3 className="font-display font-bold text-lg text-foreground mb-1">Couldn't load history</h3>
             <p className="text-sm text-muted-foreground mb-5">{error}</p>
             <PrimaryButton type="button" onClick={() => void load()}>Try again</PrimaryButton>
           </div>
@@ -122,37 +146,49 @@ export default function PlayerSessionHistoryScreen({ teamName }: { teamName: str
           </div>
         ) : (
           <div className="space-y-3">
-            {logs.map((l) => (
-              <div key={l.id} className="bg-card border border-border rounded-2xl shadow-card p-5">
-                <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
-                <p className="text-sm font-semibold text-foreground mt-1">{l.weekly_session?.week_start ?? "—"}</p>
-                <p className="font-display font-extrabold text-lg text-foreground mt-3">
-                  {l.weekly_session?.template_title ?? "Session"}
-                </p>
+            {logs.map((l) => {
+              const exerciseSummaries = groupByExercise(l.sets);
+              return (
+                <div key={l.id} className="bg-card border border-border rounded-2xl shadow-card p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-display font-extrabold text-base text-foreground">
+                        {l.weekly_session?.template_title ?? "Session"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Week starting {l.weekly_session?.week_start ?? "—"}
+                      </p>
+                    </div>
+                    <p className="text-xs font-semibold text-muted-foreground shrink-0 mt-0.5">
+                      {formatLoggedDate(l.completed_at, l.created_at)}
+                    </p>
+                  </div>
 
-                {l.sets.length > 0 && (
-                  <div className="mt-3 space-y-1">
-                    {l.sets
-                      .slice()
-                      .sort((a, b) => a.created_at.localeCompare(b.created_at))
-                      .slice(0, 10)
-                      .map((s) => (
-                        <p key={s.id} className="text-xs text-muted-foreground">
-                          {s.exercise_name}: {s.weight ?? "—"} x {s.reps ?? "—"} (set {s.set_number})
+                  {exerciseSummaries.length > 0 && (
+                    <div className="mt-3 space-y-1 border-t border-border pt-3">
+                      {exerciseSummaries.map(({ name, summary }) => (
+                        <p key={name} className="text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground">{name}</span>
+                          {" — "}
+                          {summary}
                         </p>
                       ))}
-                  </div>
-                )}
+                    </div>
+                  )}
 
-                {l.weekly_session?.id && (
-                  <div className="mt-4">
-                    <PrimaryButton type="button" onClick={() => router.push(`/sessions/${encodeURIComponent(l.weekly_session!.id)}`)}>
-                      Open session
-                    </PrimaryButton>
-                  </div>
-                )}
-              </div>
-            ))}
+                  {l.weekly_session?.id && (
+                    <div className="mt-4">
+                      <PrimaryButton
+                        type="button"
+                        onClick={() => router.push(`/sessions/${encodeURIComponent(l.weekly_session!.id)}`)}
+                      >
+                        Open session
+                      </PrimaryButton>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </PageContainer>
