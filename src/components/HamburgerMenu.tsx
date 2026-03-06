@@ -85,7 +85,7 @@ export default function HamburgerMenu() {
           type="button"
           variant="secondary"
           size="icon"
-          className="h-11 w-11 rounded-2xl shadow-card border border-border bg-card/95 backdrop-blur-sm"
+          className="h-11 w-11 rounded-2xl shadow-card border border-border bg-background/95 backdrop-blur-sm"
           onClick={() => setOpen(true)}
           aria-label="Open menu"
         >
@@ -95,28 +95,28 @@ export default function HamburgerMenu() {
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" className="p-0">
-          <div className="p-6 border-b border-border">
-            <SheetHeader className="space-y-1">
-              <SheetTitle className="font-display font-extrabold">Gym Tracker</SheetTitle>
-              <p className="text-sm text-muted-foreground">Rep Receipt</p>
+          <div className="px-6 pt-6 pb-5 border-b border-border">
+            <SheetHeader className="space-y-0.5">
+              <SheetTitle className="font-display font-extrabold text-foreground">Gym Tracker</SheetTitle>
+              <p className="text-xs text-muted-foreground">Rep Receipt</p>
             </SheetHeader>
 
             {player?.playerName && (
-              <div className="mt-4">
-                <p className="text-xs text-muted-foreground">Selected player</p>
-                <p className="text-sm font-semibold text-foreground">{player.playerName}</p>
+              <div className="mt-4 px-3 py-2.5 bg-secondary rounded-xl">
+                <p className="text-[11px] font-medium text-muted-foreground">Signed in as</p>
+                <p className="text-sm font-semibold text-foreground mt-0.5">{player.playerName}</p>
               </div>
             )}
           </div>
 
-          <nav className="p-3">
-            <ul className="space-y-1">
+          <nav className="p-3 pt-4">
+            <ul className="space-y-0.5">
               <li>
                 <Link
                   href={`/select-player?next=${encodeURIComponent(pathname || "/")}`}
                   onClick={() => setOpen(false)}
                   className={
-                    "block rounded-xl px-4 py-3 text-sm font-semibold transition-colors " +
+                    "block rounded-xl px-4 py-2.5 text-sm font-semibold text-foreground transition-colors " +
                     (pathname.startsWith("/select-player") ? "bg-secondary" : "hover:bg-secondary")
                   }
                 >
@@ -130,7 +130,7 @@ export default function HamburgerMenu() {
                     href={l.href}
                     onClick={() => setOpen(false)}
                     className={
-                      "block rounded-xl px-4 py-3 text-sm font-semibold transition-colors " +
+                      "block rounded-xl px-4 py-2.5 text-sm font-semibold text-foreground transition-colors " +
                       (pathname === l.href || pathname.startsWith(l.href + "/") ? "bg-secondary" : "hover:bg-secondary")
                     }
                   >

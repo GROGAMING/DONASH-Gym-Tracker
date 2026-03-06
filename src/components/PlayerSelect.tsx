@@ -51,8 +51,8 @@ const PlayerSelect: React.FC<PlayerSelectProps> = ({ players, selected, onSelect
           w-full flex items-center justify-between px-4 py-3.5 rounded-xl border-2 bg-card
           transition-all duration-200 active-scale
           ${open
-            ? "border-primary shadow-card"
-            : "border-border hover:border-muted-foreground/40 shadow-card"
+            ? "border-foreground shadow-card"
+            : "border-border hover:border-foreground/30 shadow-card"
           }
         `}
       >
@@ -65,10 +65,10 @@ const PlayerSelect: React.FC<PlayerSelectProps> = ({ players, selected, onSelect
       </button>
 
       {open && (
-        <div className="absolute z-50 left-0 right-0 top-full mt-2 border border-border rounded-xl shadow-card-hover overflow-hidden animate-scale-in bg-card text-foreground">
+        <div className="absolute z-50 left-0 right-0 top-full mt-2 border border-border rounded-2xl shadow-card-hover overflow-hidden animate-scale-in bg-card text-foreground">
           {/* Search */}
-          <div className="p-2 border-b border-border">
-            <div className="flex items-center gap-2 px-3 py-2 bg-secondary rounded-lg">
+          <div className="p-2.5 border-b border-border">
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-muted rounded-xl">
               <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <input
                 ref={searchRef}
@@ -92,13 +92,13 @@ const PlayerSelect: React.FC<PlayerSelectProps> = ({ players, selected, onSelect
                   key={name}
                   type="button"
                   onClick={() => handleSelect(name)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-secondary transition-colors text-left"
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-muted transition-colors text-left"
                 >
                   <span className={name === selected ? "font-semibold text-foreground" : "text-foreground"}>
                     {name}
                   </span>
                   {name === selected && (
-                    <Check className="w-4 h-4 text-accent" />
+                    <Check className="w-4 h-4 text-foreground" />
                   )}
                 </button>
               ))

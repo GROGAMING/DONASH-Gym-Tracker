@@ -60,18 +60,16 @@ export default function SelectPlayerPage() {
     <AppShell teamName="Gym Tracker" showBottomNav={false}>
       {toast && <ToastBanner message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-      <PageContainer className="pt-6 sm:pt-8 pb-6 sm:pb-8 animate-fade-up">
-        <div className="flex items-center gap-2.5 mb-5">
-          <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-button">
-            <UserRound className="w-4.5 h-4.5 text-accent-foreground" strokeWidth={2} />
+      <PageContainer className="pt-8 sm:pt-12 pb-8 animate-fade-up">
+        <div className="mb-7">
+          <div className="w-12 h-12 rounded-2xl bg-foreground flex items-center justify-center shadow-button mb-4">
+            <UserRound className="w-5 h-5 text-background" strokeWidth={2} />
           </div>
-          <div>
-            <h2 className="font-display font-extrabold text-xl text-foreground leading-tight">Pick your name</h2>
-            <p className="text-xs text-muted-foreground">We’ll remember you for this session</p>
-          </div>
+          <h2 className="font-display font-extrabold text-2xl text-foreground leading-tight">Pick your name</h2>
+          <p className="text-sm text-muted-foreground mt-1">We'll remember you for this session</p>
         </div>
 
-        <div className="bg-card rounded-2xl shadow-card border border-border p-6">
+        <div className="bg-card rounded-2xl shadow-card border border-border p-5">
           <PlayerSelect
             players={playerNames}
             selected={selectedName}

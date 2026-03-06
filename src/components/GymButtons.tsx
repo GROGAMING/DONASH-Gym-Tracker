@@ -18,11 +18,11 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
     disabled={disabled || loading}
     className={`
       w-full flex items-center justify-center gap-2
-      bg-primary text-primary-foreground
+      bg-foreground text-background
       font-semibold text-[15px] tracking-tight
-      px-5 py-4 rounded-xl shadow-button
-      transition-all duration-150 active-scale
-      disabled:opacity-50 disabled:pointer-events-none
+      px-5 py-4 rounded-2xl shadow-button
+      transition-all duration-150 active-scale hover:opacity-90
+      disabled:opacity-40 disabled:pointer-events-none
       ${className}
     `}
   >
@@ -44,11 +44,12 @@ export const SecondaryButton: React.FC<SecondaryButtonProps> = ({
     {...props}
     className={`
       inline-flex items-center justify-center gap-1.5
-      bg-transparent text-muted-foreground border border-border
+      bg-transparent text-foreground/70 border border-border
       font-medium text-sm
-      px-3 py-1.5 rounded-lg
-      hover:bg-muted hover:text-foreground
+      px-3 py-2 rounded-xl
+      hover:bg-secondary hover:text-foreground
       transition-all duration-150 active-scale
+      disabled:opacity-40 disabled:pointer-events-none
       ${className}
     `}
   >

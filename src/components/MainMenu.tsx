@@ -72,13 +72,13 @@ const MainMenu: React.FC<MainMenuProps> = ({ onNavigate }) => {
             onClick={() => !disabled && onNavigate(id)}
             className={`
               w-full flex items-center gap-4 px-5 py-5 sm:py-6 rounded-2xl border text-left
-              transition-all duration-150 active-scale shadow-card
+              transition-all duration-200 active-scale shadow-card
               animate-fade-up
               ${disabled
-                ? "opacity-50 pointer-events-none bg-card border-border"
+                ? "opacity-40 pointer-events-none bg-card border-border"
                 : accent
-                  ? "bg-primary border-primary hover:bg-primary/90"
-                  : "bg-card border-border hover:border-foreground/20 hover:shadow-card-hover"
+                  ? "bg-foreground border-foreground hover:opacity-90"
+                  : "bg-card border-border hover:border-border hover:shadow-card-hover"
               }
             `}
             style={{ animationDelay: `${i * 70}ms` }}
@@ -86,18 +86,18 @@ const MainMenu: React.FC<MainMenuProps> = ({ onNavigate }) => {
             <div
               className={`
                 w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0
-                ${accent && !disabled ? "bg-primary-foreground/15" : "bg-secondary"}
+                ${accent && !disabled ? "bg-background/15" : "bg-secondary"}
               `}
             >
               <Icon
-                className={`w-5 h-5 ${accent && !disabled ? "text-primary-foreground" : "text-foreground"}`}
+                className={`w-5 h-5 ${accent && !disabled ? "text-background" : "text-foreground/80"}`}
                 strokeWidth={2}
               />
             </div>
             <div className="flex-1 min-w-0">
               <p
                 className={`font-display font-bold text-[15px] sm:text-base leading-tight ${
-                  accent && !disabled ? "text-primary-foreground" : "text-foreground"
+                  accent && !disabled ? "text-background" : "text-foreground"
                 }`}
               >
                 {label}
@@ -109,14 +109,14 @@ const MainMenu: React.FC<MainMenuProps> = ({ onNavigate }) => {
               </p>
               <p
                 className={`text-xs sm:text-sm mt-0.5 leading-snug ${
-                  accent && !disabled ? "text-primary-foreground/70" : "text-muted-foreground"
+                  accent && !disabled ? "text-background/70" : "text-muted-foreground"
                 }`}
               >
                 {description}
               </p>
             </div>
             <svg
-              className={`w-4 h-4 shrink-0 ${accent && !disabled ? "text-primary-foreground/60" : "text-muted-foreground/50"}`}
+              className={`w-4 h-4 shrink-0 ${accent && !disabled ? "text-background/60" : "text-muted-foreground/40"}`}
               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

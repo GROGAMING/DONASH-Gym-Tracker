@@ -15,13 +15,13 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ teamName }) => {
   const { player, hydrated } = useSelectedPlayer();
 
   return (
-    <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-sm border-b border-border safe-top">
+    <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border safe-top">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-button">
-          <Shield className="w-4 h-4 text-primary-foreground" strokeWidth={2.5} />
+        <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center shadow-button">
+          <Shield className="w-4 h-4 text-background" strokeWidth={2.5} />
         </div>
         <div className="flex flex-col flex-1 min-w-0">
-          <span className="text-xs text-muted-foreground leading-none mb-0.5">Rep Receipt</span>
+          <span className="text-[11px] font-medium text-muted-foreground leading-none mb-0.5">Rep Receipt</span>
           <span className="font-display font-bold text-sm text-foreground leading-none truncate">{teamName}</span>
         </div>
 
