@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Plus, Save, Trash2 } from "lucide-react";
+import { ClipboardList, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
@@ -71,6 +71,83 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
 
   const [deleteTarget, setDeleteTarget] = useState<Template | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [editTarget, setEditTarget] = useState<Template | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editExercises, setEditExercises] = useState<{ name: string; target_sets: number | null; target_reps: string }[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = useCallback((t: Template) => {
+    setEditTarget(t);
+    setEditTitle(t.title);
+    setEditExercises(
+      t.exercises.length > 0
+        ? t.exercises.map((ex) => ({
+            name: ex.name,
+            target_sets: ex.target_sets,
+            target_reps: ex.target_reps ?? "",
+          }))
+        : [{ name: "", target_sets: null, target_reps: "" }],
+    );
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditTarget(null);
+    setEditTitle("");
+    setEditExercises([]);
+  }, []);
+
+  const addEditExerciseRow = useCallback(() => {
+    setEditExercises((prev) => [...prev, { name: "", target_sets: null, target_reps: "" }]);
+  }, []);
+
+  const removeEditExerciseRow = useCallback((idx: number) => {
+    setEditExercises((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const saveEdit = useCallback(async () => {
+    if (!editTarget || saving) return;
+
+    const title = editTitle.trim();
+    const exercises = editExercises
+      .map((x) => ({
+        name: x.name.trim(),
+        target_sets: typeof x.target_sets === "number" && Number.isFinite(x.target_sets) ? x.target_sets : null,
+        target_reps: x.target_reps.trim(),
+      }))
+      .filter((x) => x.name.length > 0);
+
+    if (!title) {
+      setToast({ message: "Add a title.", type: "error" });
+      return;
+    }
+    if (exercises.length === 0) {
+      setToast({ message: "Add at least one exercise.", type: "error" });
+      return;
+    }
+
+    setSaving(true);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/admin/session-templates/${encodeURIComponent(editTarget.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title, exercises }),
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setToast({ message: body?.error || "Failed to save template.", type: "error" });
+        return;
+      }
+      setToast({ message: "Template updated.", type: "success" });
+      cancelEdit();
+      await fetchTemplates();
+    } catch {
+      setToast({ message: "Failed to save template.", type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }, [cancelEdit, editExercises, editTarget, editTitle, fetchTemplates, saving]);
 
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [savingNotesId, setSavingNotesId] = useState<string | null>(null);
@@ -420,36 +497,146 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
             <p className="text-sm text-muted-foreground">No templates yet.</p>
           ) : (
             <div className="space-y-3">
-              {templates.map((t) => (
-                <div key={t.id} className="border border-border rounded-2xl p-4 bg-background">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{t.title}</p>
-                      <p className="text-xs text-muted-foreground">{t.exercises.length} exercise{t.exercises.length === 1 ? "" : "s"}</p>
+              {templates.map((t) =>
+                editTarget?.id === t.id ? (
+                  // ── Inline edit form ──
+                  <div key={t.id} className="border border-border rounded-2xl p-4 bg-background">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <p className="text-xs font-semibold text-muted-foreground">Editing template</p>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        disabled={saving}
+                        className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Cancel
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(t)}
-                      className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Delete
-                    </button>
+
+                    <label className="block text-xs font-semibold text-muted-foreground mb-2">Title</label>
+                    <input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="e.g. Push Day"
+                      className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+                      disabled={saving}
+                    />
+
+                    <div className="mt-4">
+                      <label className="block text-xs font-semibold text-muted-foreground mb-2">Exercises</label>
+                      <div className="mt-3 space-y-2">
+                        {editExercises.map((ex, i) => (
+                          <div key={`edit-ex-${i}`} className="bg-secondary rounded-xl px-4 py-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-xs font-semibold text-muted-foreground">Exercise {i + 1}</p>
+                              <button
+                                type="button"
+                                onClick={() => removeEditExerciseRow(i)}
+                                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                                disabled={saving || editExercises.length <= 1}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <div className="sm:col-span-2">
+                                <ExerciseCombobox
+                                  value={ex.name}
+                                  onChange={(name) =>
+                                    setEditExercises((prev) => prev.map((row, idx) => (idx === i ? { ...row, name } : row)))
+                                  }
+                                  disabled={saving}
+                                  placeholder="Search exercises…"
+                                />
+                              </div>
+                              <input
+                                value={typeof ex.target_sets === "number" ? String(ex.target_sets) : ""}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  const n = next.trim() === "" ? null : Number(next);
+                                  setEditExercises((prev) =>
+                                    prev.map((row, idx) =>
+                                      idx === i ? { ...row, target_sets: Number.isFinite(n as number) ? (n as number) : null } : row,
+                                    ),
+                                  );
+                                }}
+                                placeholder="Target sets"
+                                inputMode="numeric"
+                                className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+                                disabled={saving}
+                              />
+                              <input
+                                value={ex.target_reps}
+                                onChange={(e) =>
+                                  setEditExercises((prev) => prev.map((row, idx) => (idx === i ? { ...row, target_reps: e.target.value } : row)))
+                                }
+                                placeholder='Target reps (e.g. "8-10")'
+                                className="sm:col-span-3 w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+                                disabled={saving}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        <div>
+                          <SecondaryButton type="button" onClick={addEditExerciseRow} disabled={saving}>
+                            <Plus className="w-4 h-4" />
+                            Add exercise
+                          </SecondaryButton>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5">
+                      <PrimaryButton type="button" onClick={() => void saveEdit()} disabled={saving} loading={saving}>
+                        <Save className="w-4 h-4" />
+                        Save changes
+                      </PrimaryButton>
+                    </div>
                   </div>
-                  {t.exercises.length > 0 && (
-                    <div className="mt-3 space-y-1">
-                      {t.exercises.map((ex, i) => (
-                        <p key={`${t.id}-${ex.id}`} className="text-xs text-muted-foreground">
-                          {i + 1}. {ex.name}
-                          {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
-                            ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
-                            : ""}
-                        </p>
-                      ))}
+                ) : (
+                  // ── Read-only card ──
+                  <div key={t.id} className="border border-border rounded-2xl p-4 bg-background">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{t.title}</p>
+                        <p className="text-xs text-muted-foreground">{t.exercises.length} exercise{t.exercises.length === 1 ? "" : "s"}</p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(t)}
+                          className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                          disabled={!!editTarget}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(t)}
+                          className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                    {t.exercises.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {t.exercises.map((ex, i) => (
+                          <p key={`${t.id}-${ex.id}`} className="text-xs text-muted-foreground">
+                            {i + 1}. {ex.name}
+                            {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
+                              ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
+                              : ""}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ),
+              )}
             </div>
           )}
         </div>
