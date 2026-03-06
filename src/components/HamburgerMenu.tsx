@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 
 import { useSelectedPlayer } from "@/lib/useSelectedPlayer";
 
-export default function HamburgerMenu() {
+export default function HamburgerMenu({ teamName }: { teamName: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
@@ -97,7 +97,7 @@ export default function HamburgerMenu() {
         <SheetContent side="left" className="p-0">
           <div className="px-6 pt-6 pb-5 border-b border-border">
             <SheetHeader className="space-y-0.5">
-              <SheetTitle className="font-display font-extrabold text-foreground">Gym Tracker</SheetTitle>
+              <SheetTitle className="font-display font-extrabold text-foreground">{teamName}</SheetTitle>
               <p className="text-xs text-muted-foreground">Rep Receipt</p>
             </SheetHeader>
 

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 
 import AdminSessionsScreen from "@/components/AdminSessionsScreen";
+import { TEAM_NAME } from "@/lib/team";
 
 export default function AdminSessionsPage() {
   const authed = cookies().get("admin_authed")?.value === "1";
@@ -9,5 +10,5 @@ export default function AdminSessionsPage() {
     return <main style={{ padding: 20, fontFamily: "system-ui" }}>Not logged in.</main>;
   }
 
-  return <AdminSessionsScreen teamName="Gym Tracker" />;
+  return <AdminSessionsScreen teamName={TEAM_NAME} />;
 }
