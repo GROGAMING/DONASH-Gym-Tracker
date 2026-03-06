@@ -12,7 +12,7 @@ import { PrimaryButton, SecondaryButton } from "@/components/GymButtons";
 
 type ToastState = { message: string; type: "success" | "error" };
 
-type Exercise = { id: string; name: string; category: string };
+type Exercise = { id: string; name: string; category: string; is_global?: boolean };
 
 const CATEGORIES = [
   "Barbell",
@@ -171,6 +171,12 @@ export default function AdminExercisesScreen({ teamName }: { teamName: string })
           <p className="text-xs font-semibold text-muted-foreground mb-3">
             All exercises {!loading && `(${exercises.length})`}
           </p>
+          {!loading && exercises.some((e) => e.is_global) && (
+            <p className="text-xs text-muted-foreground mb-3">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-secondary text-muted-foreground text-[10px] font-medium mr-1">Shared</span>
+              exercises are available to all teams and cannot be deleted.
+            </p>
+          )}
 
           {loading ? (
             <div className="space-y-2 animate-pulse">
@@ -193,16 +199,24 @@ export default function AdminExercisesScreen({ teamName }: { teamName: string })
                   className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary transition-colors"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{ex.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-semibold text-foreground truncate">{ex.name}</p>
+                      {ex.is_global && (
+                        <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md bg-secondary text-muted-foreground text-[10px] font-medium">
+                          Shared
+                        </span>
+                      )}
+                    </div>
                     {ex.category && (
                       <p className="text-xs text-muted-foreground">{ex.category}</p>
                     )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => setDeleteTarget(ex)}
-                    className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors"
-                    aria-label={`Delete ${ex.name}`}
+                    onClick={() => !ex.is_global && setDeleteTarget(ex)}
+                    disabled={ex.is_global}
+                    className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors disabled:opacity-25 disabled:pointer-events-none"
+                    aria-label={ex.is_global ? `${ex.name} is a shared exercise` : `Delete ${ex.name}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
