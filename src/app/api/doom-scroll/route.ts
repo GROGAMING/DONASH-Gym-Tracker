@@ -18,17 +18,26 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  let query = supabaseAdmin
-    .from("uploads")
-    .select("id, created_at, image_path, status, users(name)")
-    .eq("team_id", TEAM_ID)
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  // TEAM_ID is intentional here: doom-scroll is a public feed with no player
+  // auth token in the request. Scoping to TEAM_ID keeps feeds per-deployment.
+  const run = async (select: string) => {
+    let q = supabaseAdmin
+      .from("uploads")
+      .select(select)
+      .eq("team_id", TEAM_ID)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (before) q = q.lt("created_at", before);
+    return await q;
+  };
 
-  if (before) query = query.lt("created_at", before);
+  let { data, error } = await run("id, created_at, image_path, status, comment, users(name)");
 
-  const { data, error } = await query;
+  // Backward-compatible fallback if DB doesn't have comment field
+  if (error && /column .*comment.* does not exist/i.test(error.message)) {
+    ({ data, error } = await run("id, created_at, image_path, status, users(name)"));
+  }
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -50,6 +59,7 @@ export async function GET(request: NextRequest) {
         name: row.users?.name ?? "Unknown",
         created_at: row.created_at,
         image_path: row.image_path,
+        comment: typeof row.comment === "string" ? row.comment : null,
         url: signedErr ? null : signedData?.signedUrl ?? null,
       };
     })

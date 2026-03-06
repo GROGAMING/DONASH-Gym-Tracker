@@ -23,37 +23,18 @@ export default function WeeklyQuotaSettings() {
   }
 
   return (
-    <div style={{ 
-      padding: "20px", 
-      maxWidth: "400px", 
-      margin: "20px 0",
-      border: "1px solid #ddd",
-      borderRadius: "8px",
-      backgroundColor: "#f9f9f9"
-    }}>
-      <h3 style={{ margin: "0 0 16px 0" }}>Weekly Quota Settings</h3>
+    <div className="card" style={{ maxWidth: "400px", margin: "20px 0" }}>
+      <h3 className="card-title">Weekly Quota Settings</h3>
       
       <div style={{ marginBottom: "16px" }}>
-        <label style={{ 
-          display: "block", 
-          marginBottom: "8px",
-          fontWeight: "bold"
-        }}>
+        <label className="label">
           Required sessions this week:
         </label>
         
         <select
           value={required}
           onChange={(e) => saveSettings(Number(e.target.value))}
-          style={{
-            width: "100%",
-            padding: "10px",
-            border: "1px solid #ddd",
-            borderRadius: "6px",
-            backgroundColor: "#fff",
-            fontSize: "16px",
-            cursor: "pointer"
-          }}
+          className="input"
         >
           <option value={1}>1</option>
           <option value={2}>2</option>
@@ -63,27 +44,13 @@ export default function WeeklyQuotaSettings() {
       </div>
 
       {message && (
-        <div style={{
-          padding: "8px 12px",
-          borderRadius: "4px",
-          backgroundColor: "#d4edda",
-          color: "#155724",
-          fontSize: "14px",
-          marginBottom: "8px"
-        }}>
+        <div className="message message-success">
           ✅ {message}
         </div>
       )}
 
       {error && (
-        <div style={{
-          padding: "8px 12px",
-          borderRadius: "4px",
-          backgroundColor: "#f8d7da",
-          color: "#721c24",
-          fontSize: "14px",
-          marginBottom: "8px"
-        }}>
+        <div className="message message-error">
           ❌ {error}
         </div>
       )}

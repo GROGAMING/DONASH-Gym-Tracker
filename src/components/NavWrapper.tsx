@@ -1,10 +1,6 @@
-"use client";
-
-import { usePathname } from "next/navigation";
-import HamburgerMenu from "./HamburgerMenu";
+import { TEAM_NAME } from "@/lib/team";
+import NavWrapperClient from "./NavWrapperClient";
 
 export default function NavWrapper() {
-  const pathname = usePathname();
-  if (pathname === "/") return null;
-  return <HamburgerMenu />;
+  return <NavWrapperClient teamName={TEAM_NAME} />;
 }

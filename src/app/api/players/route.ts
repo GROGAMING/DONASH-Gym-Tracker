@@ -6,6 +6,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET() {
+  // TEAM_ID is intentional here: this is the player-select endpoint — the player
+  // has not been chosen yet, so there is no user context to derive team from.
+  // It returns only the players for this deployment's team.
   const { data, error } = await supabaseAdmin
     .from("users")
     .select("id,name")

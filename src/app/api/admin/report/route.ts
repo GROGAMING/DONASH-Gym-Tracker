@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { cookies } from "next/headers";
 import PDFDocument from "pdfkit";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { TEAM_NAME } from "@/lib/team";
 
 export async function GET(req: Request) {
   const authed = cookies().get("admin_authed")?.value === "1";
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
       doc.on("end", () => controller.close());
       doc.on("error", (err: any) => controller.error(err));
 
-      doc.fontSize(18).text("Gym Tracker Weekly Report");
+      doc.fontSize(18).text(`${TEAM_NAME} Weekly Report`);
       doc.moveDown(0.5);
       doc.fontSize(12).text(`Week starting: ${weekStart}`);
       doc.moveDown();
