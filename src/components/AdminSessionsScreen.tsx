@@ -6,6 +6,7 @@ import { ClipboardList, Plus, Save } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
+import ExerciseCombobox from "@/components/ExerciseCombobox";
 import PageContainer from "@/components/PageContainer";
 import ToastBanner from "@/components/ToastBanner";
 import { PrimaryButton, SecondaryButton } from "@/components/GymButtons";
@@ -273,15 +274,16 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                   </div>
 
                   <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <input
-                      value={ex.name}
-                      onChange={(e) =>
-                        setNewExercises((prev) => prev.map((row, idx) => (idx === i ? { ...row, name: e.target.value } : row)))
-                      }
-                      placeholder="Exercise name"
-                      className="sm:col-span-2 w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-                      disabled={creating}
-                    />
+                    <div className="sm:col-span-2">
+                      <ExerciseCombobox
+                        value={ex.name}
+                        onChange={(name) =>
+                          setNewExercises((prev) => prev.map((row: typeof prev[number], idx: number) => (idx === i ? { ...row, name } : row)))
+                        }
+                        disabled={creating}
+                        placeholder="Search exercises…"
+                      />
+                    </div>
                     <input
                       value={typeof ex.target_sets === "number" ? String(ex.target_sets) : ""}
                       onChange={(e) => {

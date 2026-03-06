@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 
@@ -43,12 +43,30 @@ type LastTimeResponse = {
   error?: string;
 };
 
+type SaveState = "idle" | "saving" | "saved";
+
 function newSetRow(): SetRow {
-  return {
-    id: `${Date.now()}-${Math.random()}`,
-    weight: "",
-    reps: "",
-  };
+  return { id: `${Date.now()}-${Math.random()}`, weight: "", reps: "" };
+}
+
+function localKey(playerId: string, weeklySessionId: string) {
+  return `draft:${playerId}:${weeklySessionId}`;
+}
+
+function serializeSets(setsByExercise: Record<string, SetRow[]>): Record<string, { weight: string; reps: string }[]> {
+  const out: Record<string, { weight: string; reps: string }[]> = {};
+  for (const [exId, rows] of Object.entries(setsByExercise)) {
+    out[exId] = rows.map((r) => ({ weight: r.weight, reps: r.reps }));
+  }
+  return out;
+}
+
+function deserializeSets(raw: Record<string, { weight: string; reps: string }[]>): Record<string, SetRow[]> {
+  const out: Record<string, SetRow[]> = {};
+  for (const [exId, rows] of Object.entries(raw)) {
+    out[exId] = rows.map((r) => ({ id: `${Date.now()}-${Math.random()}`, weight: r.weight, reps: r.reps }));
+  }
+  return out;
 }
 
 export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }: { teamName: string; weeklySessionId: string }) {
@@ -61,105 +79,163 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [logging, setLogging] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
 
   const [setsByExercise, setSetsByExercise] = useState<Record<string, SetRow[]>>({});
   const [completedExercise, setCompletedExercise] = useState<Record<string, boolean>>({});
-
   const [lastTime, setLastTime] = useState<LastTimeResponse | null>(null);
+
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstLoad = useRef(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(weeklySessionId)}`);
       const body = (await res.json().catch(() => null)) as ApiResponse | null;
-      if (!res.ok) {
-        setError(body?.error || "Failed to load session.");
-        setData(null);
-        return;
-      }
+      if (!res.ok) { setError(body?.error || "Failed to load session."); setData(null); return; }
       setData(body);
     } catch {
-      setError("Failed to load session.");
-      setData(null);
+      setError("Failed to load session."); setData(null);
     } finally {
       setLoading(false);
     }
   }, [weeklySessionId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
     const templateId = data?.session?.template_id;
     if (!playerId || !templateId) return;
-
     (async () => {
       const res = await fetch(`/api/player-sessions/last-time?playerId=${encodeURIComponent(playerId)}&templateId=${encodeURIComponent(templateId)}`);
       const body = (await res.json().catch(() => null)) as LastTimeResponse | null;
-      if (!res.ok) {
-        setLastTime({ last: {}, error: body?.error || "Failed to load last time." });
-        return;
-      }
-      setLastTime(body);
+      setLastTime(res.ok ? body : { last: {}, error: body?.error || "Failed to load last time." });
     })();
   }, [data?.session?.template_id, playerId]);
 
+  // Restore draft on load (Supabase first, fallback to localStorage)
+  useEffect(() => {
+    if (!data?.session || !playerId || !isFirstLoad.current) return;
+    isFirstLoad.current = false;
+
+    const key = localKey(playerId, weeklySessionId);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/player-sessions/draft?weeklySessionId=${encodeURIComponent(weeklySessionId)}&playerId=${encodeURIComponent(playerId)}`);
+        if (res.ok) {
+          const body = (await res.json()) as { draft: { id: string; sets: { exercise_id: string | null; exercise_name: string; set_number: number; reps: number | null; weight: number | null }[] } | null };
+          if (body.draft && body.draft.sets.length > 0) {
+            const restored: Record<string, SetRow[]> = {};
+            for (const s of body.draft.sets) {
+              const exId = data.session.exercises.find((e) => e.name === s.exercise_name || e.id === s.exercise_id)?.id;
+              if (!exId) continue;
+              if (!restored[exId]) restored[exId] = [];
+              const idx = s.set_number - 1;
+              while (restored[exId].length <= idx) restored[exId].push(newSetRow());
+              restored[exId][idx] = { id: `${Date.now()}-${Math.random()}`, weight: s.weight != null ? String(s.weight) : "", reps: s.reps != null ? String(s.reps) : "" };
+            }
+            setSetsByExercise(restored);
+            return;
+          }
+        }
+      } catch { /* fall through to localStorage */ }
+
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Record<string, { weight: string; reps: string }[]>;
+          setSetsByExercise(deserializeSets(parsed));
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [data, playerId, weeklySessionId]);
+
+  const buildSetPayload = useCallback((session: ApiResponse["session"]) => {
+    const payload: { exerciseId: string; exerciseName: string; setNumber: number; reps: number | null; weight: number | null }[] = [];
+    for (const ex of session.exercises) {
+      const rows = setsByExercise[ex.id] ?? [];
+      rows.forEach((r, idx) => {
+        const w = r.weight.trim(); const repsStr = r.reps.trim();
+        const weight = w === "" ? null : (Number.isFinite(Number(w)) ? Number(w) : null);
+        const reps = repsStr === "" ? null : (Number.isFinite(Number(repsStr)) ? Number(repsStr) : null);
+        payload.push({ exerciseId: ex.id, exerciseName: ex.name, setNumber: idx + 1, reps, weight });
+      });
+    }
+    return payload;
+  }, [setsByExercise]);
+
+  const triggerAutosave = useCallback((sets: Record<string, SetRow[]>) => {
+    if (!playerId || !data?.session) return;
+    const key = localKey(playerId, weeklySessionId);
+
+    // localStorage immediately
+    try { localStorage.setItem(key, JSON.stringify(serializeSets(sets))); } catch { /* ignore */ }
+
+    // Supabase debounced
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    setSaveState("saving");
+    autosaveTimer.current = setTimeout(async () => {
+      try {
+        const session = data.session;
+        const payload: { exerciseId: string; exerciseName: string; setNumber: number; reps: number | null; weight: number | null }[] = [];
+        for (const ex of session.exercises) {
+          const rows = sets[ex.id] ?? [];
+          rows.forEach((r, idx) => {
+            const w = r.weight.trim(); const repsStr = r.reps.trim();
+            const weight = w === "" ? null : (Number.isFinite(Number(w)) ? Number(w) : null);
+            const reps = repsStr === "" ? null : (Number.isFinite(Number(repsStr)) ? Number(repsStr) : null);
+            payload.push({ exerciseId: ex.id, exerciseName: ex.name, setNumber: idx + 1, reps, weight });
+          });
+        }
+        await fetch("/api/player-sessions/draft", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ weeklySessionId, playerId, sets: payload }),
+        });
+        setSaveState("saved");
+        setTimeout(() => setSaveState("idle"), 2000);
+      } catch { setSaveState("idle"); }
+    }, 800);
+  }, [data, playerId, weeklySessionId]);
+
   const title = useMemo(() => {
     const t = data?.session?.template_title;
-    if (typeof t === "string" && t.trim().length > 0) return t;
-    return "Session";
+    return typeof t === "string" && t.trim().length > 0 ? t : "Session";
   }, [data?.session?.template_title]);
 
   const addSet = useCallback((exerciseId: string) => {
-    setSetsByExercise((prev) => ({
-      ...prev,
-      [exerciseId]: [...(prev[exerciseId] ?? [newSetRow()]), newSetRow()],
-    }));
-  }, []);
+    setSetsByExercise((prev) => {
+      const next = { ...prev, [exerciseId]: [...(prev[exerciseId] ?? [newSetRow()]), newSetRow()] };
+      triggerAutosave(next);
+      return next;
+    });
+  }, [triggerAutosave]);
 
   const toggleCompleted = useCallback((exerciseId: string) => {
     setCompletedExercise((prev) => ({ ...prev, [exerciseId]: !prev[exerciseId] }));
   }, []);
 
   const updateSet = useCallback((exerciseId: string, setId: string, patch: Partial<SetRow>) => {
-    setSetsByExercise((prev) => ({
-      ...prev,
-      [exerciseId]: (prev[exerciseId] ?? []).map((s) => (s.id === setId ? { ...s, ...patch } : s)),
-    }));
-  }, []);
+    setSetsByExercise((prev) => {
+      const next = {
+        ...prev,
+        [exerciseId]: (prev[exerciseId] ?? []).map((s) => (s.id === setId ? { ...s, ...patch } : s)),
+      };
+      triggerAutosave(next);
+      return next;
+    });
+  }, [triggerAutosave]);
 
   const onLog = useCallback(async () => {
     if (logging) return;
-    if (!playerId) {
-      setToast({ message: "Pick your name first.", type: "error" });
-      return;
-    }
-
+    if (!playerId) { setToast({ message: "Pick your name first.", type: "error" }); return; }
     const session = data?.session;
     if (!session) return;
 
-    const setPayload: any[] = [];
-    for (const ex of session.exercises) {
-      const rows = setsByExercise[ex.id] ?? [];
-      rows.forEach((r, idx) => {
-        const w = r.weight.trim();
-        const reps = r.reps.trim();
-        const weightNum = w === "" ? null : Number(w);
-        const repsNum = reps === "" ? null : Number(reps);
-
-        setPayload.push({
-          exerciseId: ex.id,
-          exerciseName: ex.name,
-          setNumber: idx + 1,
-          reps: typeof repsNum === "number" && Number.isFinite(repsNum) ? repsNum : null,
-          weight: typeof weightNum === "number" && Number.isFinite(weightNum) ? weightNum : null,
-        });
-      });
-    }
-
+    const sets = buildSetPayload(session);
     setLogging(true);
     setToast(null);
 
@@ -167,28 +243,21 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
       const res = await fetch("/api/player-sessions/log", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          weeklySessionId: session.id,
-          playerId,
-          completed: true,
-          sets: setPayload,
-        }),
+        body: JSON.stringify({ weeklySessionId: session.id, playerId, completed: true, sets }),
       });
-
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        setToast({ message: body?.error || "Failed to log session.", type: "error" });
-        return;
-      }
+      if (!res.ok) { setToast({ message: body?.error || "Failed to log session.", type: "error" }); return; }
 
-      setToast({ message: "Session logged.", type: "success" });
-      router.push("/sessions/history");
+      // Clear draft from localStorage after successful log
+      try { localStorage.removeItem(localKey(playerId, weeklySessionId)); } catch { /* ignore */ }
+      setToast({ message: "Session logged!", type: "success" });
+      setTimeout(() => router.push("/sessions/history"), 800);
     } catch {
       setToast({ message: "Failed to log session.", type: "error" });
     } finally {
       setLogging(false);
     }
-  }, [data?.session, logging, playerId, router, setsByExercise]);
+  }, [buildSetPayload, data?.session, logging, playerId, router, weeklySessionId]);
 
   return (
     <AppShell teamName={teamName}>
@@ -209,16 +278,25 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
             <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center mb-4">
               <AlertCircle className="w-5 h-5 text-foreground" />
             </div>
-            <h3 className="font-display font-bold text-lg text-foreground mb-1">Couldn’t load session</h3>
+            <h3 className="font-display font-bold text-lg text-foreground mb-1">Couldn't load session</h3>
             <p className="text-sm text-muted-foreground mb-5">{error}</p>
             <PrimaryButton type="button" onClick={() => void load()}>Try again</PrimaryButton>
           </div>
         ) : !data?.session ? null : (
           <>
             <div className="bg-card border border-border rounded-2xl shadow-card p-5 mb-4">
-              <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
-              <p className="text-sm font-semibold text-foreground mt-1">{data.session.week_start}</p>
-              <p className="font-display font-extrabold text-lg text-foreground mt-3">{title}</p>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
+                  <p className="text-sm font-semibold text-foreground mt-1">{data.session.week_start}</p>
+                  <p className="font-display font-extrabold text-lg text-foreground mt-3">{title}</p>
+                </div>
+                {saveState !== "idle" && (
+                  <p className="text-xs text-muted-foreground shrink-0">
+                    {saveState === "saving" ? "Saving…" : "Saved ✓"}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -237,20 +315,14 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
                         </p>
                         {last.length > 0 && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            Last time: {last
-                              .slice()
-                              .sort((a, b) => a.set_number - b.set_number)
-                              .map((s) => `${s.weight ?? "—"} x ${s.reps ?? "—"}`)
-                              .join(", ")}
+                            Last time: {last.slice().sort((a, b) => a.set_number - b.set_number).map((s) => `${s.weight ?? "—"} x ${s.reps ?? "—"}`).join(", ")}
                           </p>
                         )}
                       </div>
                       <button
                         type="button"
                         onClick={() => toggleCompleted(ex.id)}
-                        className={`inline-flex items-center gap-2 text-xs font-semibold transition-colors ${
-                          isDone ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                        }`}
+                        className={`inline-flex items-center gap-2 text-xs font-semibold transition-colors ${isDone ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                       >
                         <CheckCircle2 className={`w-4 h-4 ${isDone ? "text-primary" : "text-muted-foreground"}`} />
                         {isDone ? "Done" : "Mark done"}
@@ -279,7 +351,6 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
                           />
                         </div>
                       ))}
-
                       <div className="flex justify-between gap-3">
                         <SecondaryButton type="button" onClick={() => addSet(ex.id)}>Add set</SecondaryButton>
                       </div>
