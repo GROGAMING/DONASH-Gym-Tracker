@@ -11,6 +11,7 @@ type WeeklySessionRow = {
   id: string;
   week_start: string;
   template_id: string;
+  notes: string;
   session_templates?: { id?: string; title?: string } | null;
 };
 
@@ -33,7 +34,7 @@ export async function GET() {
 
   const { data: assigned, error: aErr } = await supabase
     .from("weekly_sessions")
-    .select("id, week_start, template_id, session_templates(id, title)")
+    .select("id, week_start, template_id, notes, session_templates(id, title)")
     .eq("team_id", TEAM_ID)
     .eq("week_start", weekStart)
     .order("created_at", { ascending: true });
@@ -74,6 +75,7 @@ export async function GET() {
         id: a.id,
         week_start: a.week_start,
         template_id: a.template_id,
+        notes: a.notes ?? "",
         template_title: a.session_templates?.title ?? null,
         exercises: (exercisesByTemplate[a.template_id] ?? []).map((ex) => ({
           id: ex.id,

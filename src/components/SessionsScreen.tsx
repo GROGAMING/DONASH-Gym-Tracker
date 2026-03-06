@@ -24,6 +24,7 @@ type SessionItem = {
   week_start: string;
   template_id: string;
   template_title: string | null;
+  notes: string;
   exercises: ApiExercise[];
 };
 
@@ -144,6 +145,9 @@ export default function SessionsScreen({ teamName }: { teamName: string }) {
                   <p className="font-display font-extrabold text-lg text-foreground mt-3">
                     {(s.template_title ?? "").trim().length > 0 ? s.template_title : "This week's session"}
                   </p>
+                  {s.notes && s.notes.trim().length > 0 && (
+                    <p className="mt-3 text-sm text-muted-foreground whitespace-pre-line">{s.notes}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

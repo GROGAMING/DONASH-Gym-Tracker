@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabaseAdmin
     .from("exercise_library")
-    .select("id, name")
+    .select("id, name, category")
     .eq("team_id", TEAM_ID)
     .order("name", { ascending: true })
     .limit(50);
@@ -37,21 +37,22 @@ export async function GET(req: NextRequest) {
 export async function POST(req: Request) {
   if (!isAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await req.json().catch(() => null)) as { name?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { name?: unknown; category?: unknown } | null;
   const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const category = typeof body?.category === "string" ? body.category.trim() : "";
   if (!name) return NextResponse.json({ error: "Missing name" }, { status: 400 });
 
   const { data, error } = await supabaseAdmin
     .from("exercise_library")
-    .insert({ team_id: TEAM_ID, name })
-    .select("id, name")
+    .insert({ team_id: TEAM_ID, name, category })
+    .select("id, name, category")
     .single();
 
   if (error) {
     if (error.code === "23505") {
       const { data: existing } = await supabaseAdmin
         .from("exercise_library")
-        .select("id, name")
+        .select("id, name, category")
         .eq("team_id", TEAM_ID)
         .eq("name", name)
         .single();

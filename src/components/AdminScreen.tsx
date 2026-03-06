@@ -33,6 +33,9 @@ export default function AdminScreen({ teamName, authed }: { teamName: string; au
               <Link href="/admin/sessions" className="text-sm font-semibold text-foreground hover:underline">
                 Sessions
               </Link>
+              <Link href="/admin/exercises" className="text-sm font-semibold text-foreground hover:underline">
+                Exercises
+              </Link>
               <Link href="/admin/uploads" className="text-sm font-semibold text-foreground hover:underline">
                 View uploads
               </Link>

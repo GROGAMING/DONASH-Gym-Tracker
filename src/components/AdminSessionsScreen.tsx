@@ -71,6 +71,10 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
   const [deleteTarget, setDeleteTarget] = useState<Template | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [savingNotesId, setSavingNotesId] = useState<string | null>(null);
+  const [notesMap, setNotesMap] = useState<Record<string, string>>({});
+
   const onBack = useCallback(() => {
     router.push("/admin");
   }, [router]);
@@ -109,6 +113,11 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       }
       const data = (await res.json()) as AssignmentResponse;
       setAssignment(data);
+      const initial: Record<string, string> = {};
+      for (const a of data.assignments) {
+        initial[a.id] = (a as AssignmentItem & { notes?: string }).notes ?? "";
+      }
+      setNotesMap(initial);
     } catch {
       setAssignmentError("Failed to load weekly assignment.");
       setAssignment(null);
@@ -194,6 +203,51 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       setCreating(false);
     }
   }, [creating, fetchTemplates, newExercises, newTitle]);
+
+  const removeAssignment = useCallback(async (assignmentId: string) => {
+    if (removingId) return;
+    setRemovingId(assignmentId);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/admin/weekly-session/${encodeURIComponent(assignmentId)}`, {
+        method: "DELETE",
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setToast({ message: body?.error || "Failed to remove session.", type: "error" });
+        return;
+      }
+      setToast({ message: "Session removed.", type: "success" });
+      await fetchAssignment(normalizedWeekStart);
+    } catch {
+      setToast({ message: "Failed to remove session.", type: "error" });
+    } finally {
+      setRemovingId(null);
+    }
+  }, [fetchAssignment, normalizedWeekStart, removingId]);
+
+  const saveNotes = useCallback(async (assignmentId: string) => {
+    if (savingNotesId) return;
+    setSavingNotesId(assignmentId);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/admin/weekly-session/${encodeURIComponent(assignmentId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ notes: notesMap[assignmentId] ?? "" }),
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setToast({ message: body?.error || "Failed to save notes.", type: "error" });
+        return;
+      }
+      setToast({ message: "Notes saved.", type: "success" });
+    } catch {
+      setToast({ message: "Failed to save notes.", type: "error" });
+    } finally {
+      setSavingNotesId(null);
+    }
+  }, [notesMap, savingNotesId]);
 
   const deleteTemplate = useCallback(async () => {
     if (!deleteTarget || deleting) return;
@@ -442,8 +496,21 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
               <div className="space-y-3">
                 {assignment.assignments.map((a) => (
                   <div key={a.id} className="border border-border rounded-2xl p-4 bg-background">
-                    <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
-                    <p className="text-xs text-muted-foreground">Week starting {a.week_start}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
+                        <p className="text-xs text-muted-foreground">Week starting {a.week_start}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void removeAssignment(a.id)}
+                        disabled={removingId === a.id}
+                        className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {removingId === a.id ? "Removing…" : "Remove"}
+                      </button>
+                    </div>
                     {a.template && a.template.exercises.length > 0 && (
                       <div className="mt-3 space-y-1">
                         {a.template.exercises.map((ex, i) => (
@@ -456,6 +523,25 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                         ))}
                       </div>
                     )}
+                    <div className="mt-3">
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Notes</label>
+                      <textarea
+                        value={notesMap[a.id] ?? ""}
+                        onChange={(e) => setNotesMap((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                        placeholder="Add a note visible to players…"
+                        rows={2}
+                        className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none resize-none"
+                      />
+                      <div className="mt-1.5">
+                        <SecondaryButton
+                          type="button"
+                          onClick={() => void saveNotes(a.id)}
+                          disabled={savingNotesId === a.id}
+                        >
+                          {savingNotesId === a.id ? "Saving…" : "Save notes"}
+                        </SecondaryButton>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

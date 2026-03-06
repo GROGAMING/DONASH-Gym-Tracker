@@ -21,6 +21,7 @@ export default function HamburgerMenu() {
 
   const links = useMemo(
     () => [
+      { href: "/sessions", label: "Sessions" },
       { href: "/upload", label: "Upload" },
       { href: "/leaderboard", label: "Leaderboard" },
       { href: "/doom-scroll", label: "Doom Scroll" },
