@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-import { TEAM_ID } from "@/lib/team";
+import { getTeamIdForPlayer } from "@/lib/resolveTeam";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,6 +15,9 @@ export async function GET(req: NextRequest) {
   const playerId = asString(url.searchParams.get("playerId"));
   if (!playerId) return NextResponse.json({ error: "Missing playerId" }, { status: 400 });
 
+  const currentTeamId = await getTeamIdForPlayer(playerId);
+  if (!currentTeamId) return NextResponse.json({ error: "Player not found" }, { status: 404 });
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -23,7 +26,7 @@ export async function GET(req: NextRequest) {
   const { data: logs, error: lErr } = await supabase
     .from("player_session_logs")
     .select("id, created_at, completed_at, weekly_session_id")
-    .eq("team_id", TEAM_ID)
+    .eq("team_id", currentTeamId)
     .eq("player_id", playerId)
     .order("created_at", { ascending: false })
     .limit(25);
@@ -37,7 +40,7 @@ export async function GET(req: NextRequest) {
   const { data: weeklyRows, error: wErr } = await supabase
     .from("weekly_sessions")
     .select("id, week_start, template_id, session_templates(id, title)")
-    .eq("team_id", TEAM_ID)
+    .eq("team_id", currentTeamId)
     .in("id", weeklyIds);
 
   if (wErr) return NextResponse.json({ error: wErr.message }, { status: 500 });
@@ -50,7 +53,7 @@ export async function GET(req: NextRequest) {
   const { data: sets, error: sErr } = await supabase
     .from("player_set_logs")
     .select("id, player_session_log_id, exercise_id, exercise_name, set_number, reps, weight, created_at")
-    .eq("team_id", TEAM_ID)
+    .eq("team_id", currentTeamId)
     .in("player_session_log_id", logIds)
     .order("created_at", { ascending: false });
 

@@ -29,6 +29,9 @@ export async function GET(_req: NextRequest, ctx: { params: { weeklySessionId: s
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
+  // TEAM_ID is intentional here: the weeklySessionId alone does not carry a team
+  // signal. Scoping by TEAM_ID prevents cross-tenant data leakage in the current
+  // single-deployment model. A multi-tenant URL scheme would embed the team slug.
   const { data: session, error: sErr } = await supabase
     .from("weekly_sessions")
     .select("id, week_start, template_id, session_templates(id, title)")

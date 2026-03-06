@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { TEAM_ID } from "@/lib/team";
+import { getTeamIdForPlayer } from "@/lib/resolveTeam";
 
 export async function POST(req: Request) {
   const formData = await req.formData();
@@ -19,8 +19,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing file" }, { status: 400 });
   }
 
+  const currentTeamId = await getTeamIdForPlayer(userId);
+  if (!currentTeamId) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
   const originalFilename = file.name || "upload";
-  const objectPath = `${TEAM_ID}/${Date.now()}-${originalFilename}`;
+  const objectPath = `${currentTeamId}/${Date.now()}-${originalFilename}`;
 
   const arrayBuffer = await file.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
@@ -41,7 +44,7 @@ export async function POST(req: Request) {
     user_id: userId,
     image_path: objectPath,
     status: "active",
-    team_id: TEAM_ID,
+    team_id: currentTeamId,
   };
 
   const insertWithComment: Record<string, unknown> = {

@@ -32,6 +32,10 @@ export async function GET() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
+  // TEAM_ID is intentional here: this endpoint is called before a player is selected
+  // (it lists available sessions for the week). There is no player context to derive
+  // team from yet. In a fully multi-tenant setup this would require a team identifier
+  // in the URL or a session cookie. For now, one deployment = one team via env var.
   const { data: assigned, error: aErr } = await supabase
     .from("weekly_sessions")
     .select("id, week_start, template_id, notes, session_templates(id, title)")

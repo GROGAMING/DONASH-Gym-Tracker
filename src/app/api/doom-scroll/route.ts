@@ -18,6 +18,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // TEAM_ID is intentional here: doom-scroll is a public feed with no player
+  // auth token in the request. Scoping to TEAM_ID keeps feeds per-deployment.
   const run = async (select: string) => {
     let q = supabaseAdmin
       .from("uploads")

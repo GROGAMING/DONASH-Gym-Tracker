@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-import { TEAM_ID } from "@/lib/team";
+import { getTeamIdForPlayer } from "@/lib/resolveTeam";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -47,6 +47,9 @@ export async function POST(req: Request) {
   if (!weeklySessionId) return NextResponse.json({ error: "Missing weeklySessionId" }, { status: 400 });
   if (!playerId) return NextResponse.json({ error: "Missing playerId" }, { status: 400 });
 
+  const currentTeamId = await getTeamIdForPlayer(playerId);
+  if (!currentTeamId) return NextResponse.json({ error: "Player not found" }, { status: 404 });
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -55,7 +58,7 @@ export async function POST(req: Request) {
   const { data: weekly, error: wErr } = await supabase
     .from("weekly_sessions")
     .select("id")
-    .eq("team_id", TEAM_ID)
+    .eq("team_id", currentTeamId)
     .eq("id", weeklySessionId)
     .single();
 
@@ -64,7 +67,7 @@ export async function POST(req: Request) {
   const { data: player, error: pErr } = await supabase
     .from("users")
     .select("id")
-    .eq("team_id", TEAM_ID)
+    .eq("team_id", currentTeamId)
     .eq("id", playerId)
     .single();
 
@@ -73,7 +76,7 @@ export async function POST(req: Request) {
   const { data: sessionLog, error: lErr } = await supabase
     .from("player_session_logs")
     .insert({
-      team_id: TEAM_ID,
+      team_id: currentTeamId,
       weekly_session_id: weeklySessionId,
       player_id: playerId,
       completed_at: completed ? new Date().toISOString() : null,
@@ -94,7 +97,7 @@ export async function POST(req: Request) {
       const weight = asOptionalNumber(s.weight);
 
       return {
-        team_id: TEAM_ID,
+        team_id: currentTeamId,
         player_session_log_id: sessionLog.id as string,
         exercise_id: exerciseId || null,
         exercise_name: exerciseName,
