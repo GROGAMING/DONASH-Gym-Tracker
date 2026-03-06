@@ -9,6 +9,7 @@ type AssignmentRow = {
   id: string;
   week_start: string;
   template_id: string;
+  notes: string;
   created_at: string;
 };
 
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
 
   const { data: rows, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
-    .select("id, week_start, template_id, created_at")
+    .select("id, week_start, template_id, notes, created_at")
     .eq("team_id", TEAM_ID)
     .eq("week_start", weekStart)
     .order("created_at", { ascending: true });
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest) {
         id: a.id,
         week_start: a.week_start,
         template_id: a.template_id,
+        notes: a.notes ?? "",
         created_at: a.created_at,
         template: t
           ? {

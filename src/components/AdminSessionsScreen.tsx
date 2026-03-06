@@ -25,6 +25,7 @@ type AssignmentItem = {
   id: string;
   week_start: string;
   template_id: string;
+  notes: string;
   created_at: string;
   template: null | {
     id: string;
@@ -115,7 +116,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       setAssignment(data);
       const initial: Record<string, string> = {};
       for (const a of data.assignments) {
-        initial[a.id] = (a as AssignmentItem & { notes?: string }).notes ?? "";
+        initial[a.id] = a.notes ?? "";
       }
       setNotesMap(initial);
     } catch {
