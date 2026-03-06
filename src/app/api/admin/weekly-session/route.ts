@@ -139,7 +139,7 @@ export async function POST(req: Request) {
   const { data: assignment, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
     .insert({ team_id: TEAM_ID, week_start: weekStart, template_id: templateId })
-    .select("id, week_start, template_id, created_at")
+    .select("id, week_start, template_id, notes, created_at")
     .single();
 
   if (aErr) {
