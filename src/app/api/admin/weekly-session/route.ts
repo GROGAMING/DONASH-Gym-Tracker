@@ -20,7 +20,7 @@ type TemplateRow = {
 type TemplateExerciseRow = {
   id: string;
   template_id: string;
-  exercise_name: string;
+  name: string;
   sort_order: number;
   target_sets: number | null;
   target_reps: string | null;
@@ -41,71 +41,73 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const weekStart = normalizeWeekStart(url.searchParams.get("weekStart"));
 
-  const { data: assignment, error: aErr } = await supabaseAdmin
+  const { data: rows, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
     .select("id, week_start, template_id, created_at")
     .eq("team_id", TEAM_ID)
     .eq("week_start", weekStart)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
   if (aErr) {
     return NextResponse.json({ error: aErr.message, code: aErr.code }, { status: 500 });
   }
 
-  if (!assignment) {
-    return NextResponse.json({ weekStart, assignment: null });
+  const assignments = (rows ?? []) as AssignmentRow[];
+
+  if (assignments.length === 0) {
+    return NextResponse.json({ weekStart, assignments: [] });
   }
 
-  const a = assignment as AssignmentRow;
+  const templateIds = Array.from(new Set(assignments.map((a) => a.template_id)));
 
-  const { data: template, error: tErr } = await supabaseAdmin
-    .from("session_templates")
-    .select("id, title")
-    .eq("team_id", TEAM_ID)
-    .eq("id", a.template_id)
-    .maybeSingle();
+  const [{ data: templates, error: tErr }, { data: exRows, error: exErr }] = await Promise.all([
+    supabaseAdmin
+      .from("session_templates")
+      .select("id, title")
+      .eq("team_id", TEAM_ID)
+      .in("id", templateIds),
+    supabaseAdmin
+      .from("session_template_exercises")
+      .select("id, template_id, name, sort_order, target_sets, target_reps")
+      .in("template_id", templateIds)
+      .order("sort_order", { ascending: true }),
+  ]);
 
-  if (tErr) {
-    return NextResponse.json({ error: tErr.message, code: tErr.code }, { status: 500 });
-  }
+  if (tErr) return NextResponse.json({ error: tErr.message, code: tErr.code }, { status: 500 });
+  if (exErr) return NextResponse.json({ error: exErr.message, code: exErr.code }, { status: 500 });
 
-  const t = template as TemplateRow | null;
-
-  const { data: exRows, error: exErr } = await supabaseAdmin
-    .from("session_template_exercises")
-    .select("id, template_id, exercise_name, sort_order, target_sets, target_reps")
-    .eq("team_id", TEAM_ID)
-    .eq("template_id", a.template_id)
-    .order("sort_order", { ascending: true });
-
-  if (exErr) {
-    return NextResponse.json({ error: exErr.message, code: exErr.code }, { status: 500 });
-  }
+  const templateMap = new Map((templates ?? []).map((t) => [(t as TemplateRow).id, t as TemplateRow]));
+  const exercisesByTemplate = (exRows ?? []).reduce<Record<string, TemplateExerciseRow[]>>((acc, row) => {
+    const r = row as TemplateExerciseRow;
+    acc[r.template_id] = acc[r.template_id] ?? [];
+    acc[r.template_id].push(r);
+    return acc;
+  }, {});
 
   return NextResponse.json({
     weekStart,
-    assignment: {
-      id: a.id,
-      week_start: a.week_start,
-      template_id: a.template_id,
-      created_at: a.created_at,
-      template: t
-        ? {
-            id: t.id,
-            title: t.title,
-            exercises: (exRows ?? []).map((row) => {
-              const ex = row as TemplateExerciseRow;
-              return {
+    assignments: assignments.map((a) => {
+      const t = templateMap.get(a.template_id) ?? null;
+      return {
+        id: a.id,
+        week_start: a.week_start,
+        template_id: a.template_id,
+        created_at: a.created_at,
+        template: t
+          ? {
+              id: t.id,
+              title: t.title,
+              exercises: (exercisesByTemplate[t.id] ?? []).map((ex) => ({
                 id: ex.id,
-                name: ex.exercise_name,
+                name: ex.name,
                 sort_order: ex.sort_order,
                 target_sets: ex.target_sets,
                 target_reps: ex.target_reps,
-              };
-            }),
-          }
-        : null,
-    },
+              })),
+            }
+          : null,
+      };
+    }),
   });
 }
 
@@ -134,10 +136,7 @@ export async function POST(req: Request) {
 
   const { data: assignment, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
-    .upsert(
-      { team_id: TEAM_ID, week_start: weekStart, template_id: templateId },
-      { onConflict: "team_id,week_start" },
-    )
+    .insert({ team_id: TEAM_ID, week_start: weekStart, template_id: templateId })
     .select("id, week_start, template_id, created_at")
     .single();
 

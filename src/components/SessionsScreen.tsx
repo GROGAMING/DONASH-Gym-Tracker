@@ -19,15 +19,17 @@ type ApiExercise = {
   target_reps: string | null;
 };
 
+type SessionItem = {
+  id: string;
+  week_start: string;
+  template_id: string;
+  template_title: string | null;
+  exercises: ApiExercise[];
+};
+
 type ApiResponse = {
   weekStart: string;
-  session: null | {
-    id: string;
-    week_start: string;
-    template_id: string;
-    template_title: string | null;
-    exercises: ApiExercise[];
-  };
+  sessions: SessionItem[];
   error?: string;
 };
 
@@ -77,11 +79,7 @@ export default function SessionsScreen({ teamName }: { teamName: string }) {
     void load();
   }, [load]);
 
-  const sessionTitle = useMemo(() => {
-    const t = data?.session?.template_title;
-    if (typeof t === "string" && t.trim().length > 0) return t;
-    return "This week’s session";
-  }, [data?.session?.template_title]);
+  const sessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
 
   const onBack = useCallback(() => {
     router.push("/");
@@ -131,39 +129,44 @@ export default function SessionsScreen({ teamName }: { teamName: string }) {
               Try again
             </button>
           </div>
-        ) : !data?.session ? (
+        ) : sessions.length === 0 ? (
           <div className="bg-card border border-border rounded-2xl shadow-card p-6">
             <h3 className="font-display font-bold text-lg text-foreground mb-1">No session assigned yet</h3>
             <p className="text-sm text-muted-foreground">Check back later.</p>
           </div>
         ) : (
-          <>
-            <div className="bg-card border border-border rounded-2xl shadow-card p-5 mb-4">
-              <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
-              <p className="text-sm font-semibold text-foreground mt-1">{data.weekStart}</p>
-              <p className="font-display font-extrabold text-lg text-foreground mt-3">{sessionTitle}</p>
-            </div>
-
-            <div className="space-y-2">
-              {data.session.exercises.map((ex, i) => (
-                <div
-                  key={ex.id || `${ex.name}-${i}`}
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl bg-card border border-border shadow-card"
-                >
-                  <div className="w-5 h-5 rounded-md border-2 border-muted-foreground/30 bg-background flex items-center justify-center shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{ex.name}</p>
-                  </div>
+          <div className="space-y-6">
+            {sessions.map((s) => (
+              <div key={s.id}>
+                <div className="bg-card border border-border rounded-2xl shadow-card p-5 mb-3">
+                  <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
+                  <p className="text-sm font-semibold text-foreground mt-1">{data?.weekStart}</p>
+                  <p className="font-display font-extrabold text-lg text-foreground mt-3">
+                    {(s.template_title ?? "").trim().length > 0 ? s.template_title : "This week's session"}
+                  </p>
                 </div>
-              ))}
 
-              {data.session.exercises.length === 0 && (
-                <div className="bg-card border border-border rounded-2xl shadow-card p-6">
-                  <p className="text-sm text-muted-foreground">No exercises found for this session.</p>
+                <div className="space-y-2">
+                  {s.exercises.map((ex, i) => (
+                    <div
+                      key={ex.id || `${ex.name}-${i}`}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl bg-card border border-border shadow-card"
+                    >
+                      <div className="w-5 h-5 rounded-md border-2 border-muted-foreground/30 bg-background flex items-center justify-center shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{ex.name}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {s.exercises.length === 0 && (
+                    <div className="bg-card border border-border rounded-2xl shadow-card p-6">
+                      <p className="text-sm text-muted-foreground">No exercises found for this session.</p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </>
+              </div>
+            ))}
+          </div>
         )}
       </PageContainer>
     </AppShell>

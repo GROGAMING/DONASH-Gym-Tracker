@@ -20,15 +20,17 @@ type ApiExercise = {
   target_reps: string | null;
 };
 
+type SessionItem = {
+  id: string;
+  week_start: string;
+  template_id: string;
+  template_title: string | null;
+  exercises: ApiExercise[];
+};
+
 type ApiResponse = {
   weekStart: string;
-  session: null | {
-    id: string;
-    week_start: string;
-    template_id: string;
-    template_title: string | null;
-    exercises: ApiExercise[];
-  };
+  sessions: SessionItem[];
   error?: string;
 };
 
@@ -76,11 +78,7 @@ export default function PlayerSessionsListScreen({ teamName }: { teamName: strin
     void load();
   }, [load]);
 
-  const title = useMemo(() => {
-    const t = data?.session?.template_title;
-    if (typeof t === "string" && t.trim().length > 0) return t;
-    return "This week’s session";
-  }, [data?.session?.template_title]);
+  const sessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
 
   return (
     <AppShell teamName={teamName}>
@@ -123,29 +121,36 @@ export default function PlayerSessionsListScreen({ teamName }: { teamName: strin
             <p className="text-sm text-muted-foreground mb-5">{error}</p>
             <PrimaryButton type="button" onClick={() => void load()}>Try again</PrimaryButton>
           </div>
-        ) : !data?.session ? (
+        ) : sessions.length === 0 ? (
           <div className="bg-card border border-border rounded-2xl shadow-card p-6">
             <h3 className="font-display font-bold text-lg text-foreground mb-1">No session posted yet</h3>
             <p className="text-sm text-muted-foreground">Check back later.</p>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => router.push(`/sessions/${encodeURIComponent(data.session!.id)}`)}
-            className="w-full text-left bg-card border border-border rounded-2xl shadow-card p-5 hover:opacity-95 transition-opacity"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
-                <p className="text-sm font-semibold text-foreground mt-1">{data.weekStart}</p>
-                <p className="font-display font-extrabold text-lg text-foreground mt-3">{title}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {data.session.exercises.length} exercise{data.session.exercises.length === 1 ? "" : "s"}
-                </p>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground mt-1" />
-            </div>
-          </button>
+          <div className="space-y-3">
+            {sessions.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => router.push(`/sessions/${encodeURIComponent(s.id)}`)}
+                className="w-full text-left bg-card border border-border rounded-2xl shadow-card p-5 hover:opacity-95 transition-opacity"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
+                    <p className="text-sm font-semibold text-foreground mt-1">{data?.weekStart}</p>
+                    <p className="font-display font-extrabold text-lg text-foreground mt-3">
+                      {(s.template_title ?? "").trim().length > 0 ? s.template_title : "This week's session"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {s.exercises.length} exercise{s.exercises.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground mt-1" />
+                </div>
+              </button>
+            ))}
+          </div>
         )}
       </PageContainer>
     </AppShell>

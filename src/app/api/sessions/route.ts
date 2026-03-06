@@ -16,7 +16,8 @@ type WeeklySessionRow = {
 
 type ExerciseRow = {
   id: string;
-  exercise_name: string;
+  template_id: string;
+  name: string;
   sort_order: number;
   target_sets: number | null;
   target_reps: string | null;
@@ -35,50 +36,53 @@ export async function GET() {
     .select("id, week_start, template_id, session_templates(id, title)")
     .eq("team_id", TEAM_ID)
     .eq("week_start", weekStart)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
   if (aErr) {
     return NextResponse.json({ error: aErr.message, weekStart }, { status: 500 });
   }
 
-  if (!assigned) {
-    return NextResponse.json({ weekStart, session: null }, { headers: { "Cache-Control": "no-store" } });
+  const rows = (assigned ?? []) as WeeklySessionRow[];
+
+  if (rows.length === 0) {
+    return NextResponse.json({ weekStart, sessions: [] }, { headers: { "Cache-Control": "no-store" } });
   }
 
-  const a = assigned as WeeklySessionRow;
-
-  const templateTitle = a.session_templates?.title ?? null;
+  const templateIds = Array.from(new Set(rows.map((r) => r.template_id)));
 
   const { data: exercises, error: eErr } = await supabase
     .from("session_template_exercises")
-    .select("id, exercise_name, sort_order, target_sets, target_reps")
-    .eq("team_id", TEAM_ID)
-    .eq("template_id", a.template_id)
+    .select("id, template_id, name, sort_order, target_sets, target_reps")
+    .in("template_id", templateIds)
     .order("sort_order", { ascending: true });
 
   if (eErr) {
     return NextResponse.json({ error: eErr.message, weekStart }, { status: 500 });
   }
 
+  const exercisesByTemplate = (exercises ?? []).reduce<Record<string, ExerciseRow[]>>((acc, ex) => {
+    const r = ex as ExerciseRow;
+    acc[r.template_id] = acc[r.template_id] ?? [];
+    acc[r.template_id].push(r);
+    return acc;
+  }, {});
+
   return NextResponse.json(
     {
       weekStart,
-      session: {
+      sessions: rows.map((a) => ({
         id: a.id,
         week_start: a.week_start,
         template_id: a.template_id,
-        template_title: templateTitle,
-        exercises: (exercises ?? []).map((ex) => {
-          const e = ex as ExerciseRow;
-          return {
-            id: e.id,
-            name: e.exercise_name,
-            sort_order: e.sort_order,
-            target_sets: e.target_sets,
-            target_reps: e.target_reps,
-          };
-        }),
-      },
+        template_title: a.session_templates?.title ?? null,
+        exercises: (exercisesByTemplate[a.template_id] ?? []).map((ex) => ({
+          id: ex.id,
+          name: ex.name,
+          sort_order: ex.sort_order,
+          target_sets: ex.target_sets,
+          target_reps: ex.target_reps,
+        })),
+      })),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

@@ -20,19 +20,21 @@ type Template = {
   created_at: string;
 };
 
+type AssignmentItem = {
+  id: string;
+  week_start: string;
+  template_id: string;
+  created_at: string;
+  template: null | {
+    id: string;
+    title: string;
+    exercises: { id: string; name: string; sort_order: number; target_sets: number | null; target_reps: string | null }[];
+  };
+};
+
 type AssignmentResponse = {
   weekStart: string;
-  assignment: null | {
-    id: string;
-    week_start: string;
-    template_id: string;
-    created_at: string;
-    template: null | {
-      id: string;
-      title: string;
-      exercises: { id: string; name: string; sort_order: number; target_sets: number | null; target_reps: string | null }[];
-    };
-  };
+  assignments: AssignmentItem[];
 };
 
 function toISODateInputValue(isoYYYYMMDD: string) {
@@ -103,7 +105,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       }
       const data = (await res.json()) as AssignmentResponse;
       setAssignment(data);
-      setSelectedTemplateId(data?.assignment?.template_id || "");
     } catch {
       setAssignmentError("Failed to load weekly assignment.");
       setAssignment(null);
@@ -396,26 +397,32 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
 
           <div className="mt-5">
             {loadingAssignment ? (
-              <p className="text-sm text-muted-foreground">Loading current assignment…</p>
+              <p className="text-sm text-muted-foreground">Loading current assignments…</p>
             ) : assignmentError ? (
               <p className="text-sm text-destructive">{assignmentError}</p>
-            ) : assignment?.assignment?.template ? (
-              <div className="border border-border rounded-2xl p-4 bg-background">
-                <p className="text-sm font-semibold text-foreground">Assigned: {assignment.assignment.template.title}</p>
-                <p className="text-xs text-muted-foreground">Week starting {assignment.weekStart}</p>
-                <div className="mt-3 space-y-1">
-                  {assignment.assignment.template.exercises.map((ex, i) => (
-                    <p key={`${assignment.assignment?.id}-${ex.id}`} className="text-xs text-muted-foreground">
-                      {i + 1}. {ex.name}
-                      {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
-                        ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
-                        : ""}
-                    </p>
-                  ))}
-                </div>
-              </div>
+            ) : !assignment || assignment.assignments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No sessions assigned for this week.</p>
             ) : (
-              <p className="text-sm text-muted-foreground">No session assigned for this week.</p>
+              <div className="space-y-3">
+                {assignment.assignments.map((a) => (
+                  <div key={a.id} className="border border-border rounded-2xl p-4 bg-background">
+                    <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
+                    <p className="text-xs text-muted-foreground">Week starting {a.week_start}</p>
+                    {a.template && a.template.exercises.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {a.template.exercises.map((ex, i) => (
+                          <p key={`${a.id}-${ex.id}`} className="text-xs text-muted-foreground">
+                            {i + 1}. {ex.name}
+                            {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
+                              ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
+                              : ""}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

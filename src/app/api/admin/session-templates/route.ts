@@ -13,7 +13,7 @@ type TemplateRow = {
 type TemplateExerciseRow = {
   id: string;
   template_id: string;
-  exercise_name: string;
+  name: string;
   sort_order: number;
   target_sets: number | null;
   target_reps: string | null;
@@ -61,8 +61,7 @@ export async function GET() {
   if (templateIds.length > 0) {
     const { data: exRows, error: exErr } = await supabaseAdmin
       .from("session_template_exercises")
-      .select("id, template_id, exercise_name, sort_order, target_sets, target_reps")
-      .eq("team_id", TEAM_ID)
+      .select("id, template_id, name, sort_order, target_sets, target_reps")
       .in("template_id", templateIds)
       .order("sort_order", { ascending: true });
 
@@ -85,7 +84,7 @@ export async function GET() {
       created_at: t.created_at,
       exercises: (exercisesByTemplate[t.id] ?? []).map((ex) => ({
         id: ex.id,
-        name: ex.exercise_name,
+        name: ex.name,
         sort_order: ex.sort_order,
         target_sets: ex.target_sets,
         target_reps: ex.target_reps,
@@ -135,9 +134,8 @@ export async function POST(req: Request) {
   const row = data as TemplateRow;
 
   const exerciseInserts = exercises.map((ex, idx) => ({
-    team_id: TEAM_ID,
     template_id: row.id,
-    exercise_name: ex.name,
+    name: ex.name,
     sort_order: idx + 1,
     target_sets: ex.target_sets,
     target_reps: ex.target_reps,
@@ -146,7 +144,7 @@ export async function POST(req: Request) {
   const { data: exRows, error: exErr } = await supabaseAdmin
     .from("session_template_exercises")
     .insert(exerciseInserts)
-    .select("id, template_id, exercise_name, sort_order, target_sets, target_reps")
+    .select("id, template_id, name, sort_order, target_sets, target_reps")
     .order("sort_order", { ascending: true });
 
   if (exErr) {
@@ -161,7 +159,7 @@ export async function POST(req: Request) {
       const e = ex as TemplateExerciseRow;
       return {
         id: e.id,
-        name: e.exercise_name,
+        name: e.name,
         sort_order: e.sort_order,
         target_sets: e.target_sets,
         target_reps: e.target_reps,

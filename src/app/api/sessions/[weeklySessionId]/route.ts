@@ -15,7 +15,7 @@ type WeeklySessionRow = {
 
 type ExerciseRow = {
   id: string;
-  exercise_name: string;
+  name: string;
   sort_order: number;
   target_sets: number | null;
   target_reps: string | null;
@@ -43,8 +43,7 @@ export async function GET(_req: NextRequest, ctx: { params: { weeklySessionId: s
 
   const { data: exercises, error: eErr } = await supabase
     .from("session_template_exercises")
-    .select("id, exercise_name, sort_order, target_sets, target_reps")
-    .eq("team_id", TEAM_ID)
+    .select("id, name, sort_order, target_sets, target_reps")
     .eq("template_id", s.template_id)
     .order("sort_order", { ascending: true });
 
@@ -61,7 +60,7 @@ export async function GET(_req: NextRequest, ctx: { params: { weeklySessionId: s
           const ex = row as ExerciseRow;
           return {
             id: ex.id,
-            name: ex.exercise_name,
+            name: ex.name,
             sort_order: ex.sort_order,
             target_sets: ex.target_sets,
             target_reps: ex.target_reps,
