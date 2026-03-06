@@ -105,6 +105,27 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     setEditExercises((prev) => prev.filter((_, i) => i !== idx));
   }, []);
 
+  const fetchTemplates = useCallback(async () => {
+    setLoadingTemplates(true);
+    setTemplatesError(null);
+    try {
+      const res = await fetch("/api/admin/session-templates");
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setTemplatesError(body?.error || "Failed to load templates.");
+        setTemplates([]);
+        return;
+      }
+      const data = (await res.json()) as Template[];
+      setTemplates(Array.isArray(data) ? data : []);
+    } catch {
+      setTemplatesError("Failed to load templates.");
+      setTemplates([]);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  }, []);
+
   const saveEdit = useCallback(async () => {
     if (!editTarget || saving) return;
 
@@ -156,27 +177,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
   const onBack = useCallback(() => {
     router.push("/admin");
   }, [router]);
-
-  const fetchTemplates = useCallback(async () => {
-    setLoadingTemplates(true);
-    setTemplatesError(null);
-    try {
-      const res = await fetch("/api/admin/session-templates");
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setTemplatesError(body?.error || "Failed to load templates.");
-        setTemplates([]);
-        return;
-      }
-      const data = (await res.json()) as Template[];
-      setTemplates(Array.isArray(data) ? data : []);
-    } catch {
-      setTemplatesError("Failed to load templates.");
-      setTemplates([]);
-    } finally {
-      setLoadingTemplates(false);
-    }
-  }, []);
 
   const fetchAssignment = useCallback(async (weekStart: string) => {
     setLoadingAssignment(true);
