@@ -73,6 +73,24 @@ export async function POST(req: Request) {
 
   if (pErr || !player) return NextResponse.json({ error: "Player not found" }, { status: 404 });
 
+  // Idempotency: prevent duplicate logs for the same player + weekly session
+  const { data: existing, error: existErr } = await supabase
+    .from("player_session_logs")
+    .select("id")
+    .eq("team_id", TEAM_ID)
+    .eq("player_id", playerId)
+    .eq("weekly_session_id", weeklySessionId)
+    .maybeSingle();
+
+  if (existErr) return NextResponse.json({ error: existErr.message }, { status: 500 });
+
+  if (existing) {
+    return NextResponse.json(
+      { error: "You have already logged this session.", sessionLogId: (existing as { id: string }).id, alreadyLogged: true },
+      { status: 409 },
+    );
+  }
+
   const { data: sessionLog, error: lErr } = await supabase
     .from("player_session_logs")
     .insert({

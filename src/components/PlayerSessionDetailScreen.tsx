@@ -296,8 +296,17 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ weeklySessionId: session.id, playerId, completed: true, sets }),
       });
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) { setToast({ message: body?.error || "Failed to log session.", type: "error" }); return; }
+
+      const body = (await res.json().catch(() => null)) as { error?: string; alreadyLogged?: boolean } | null;
+      if (!res.ok) {
+        if (body?.alreadyLogged) {
+          setToast({ message: "Already logged — see your history.", type: "success" });
+          router.push("/sessions/history");
+          return;
+        }
+        setToast({ message: body?.error || "Failed to log session.", type: "error" });
+        return;
+      }
 
       try { localStorage.removeItem(localKey(playerId, weeklySessionId)); } catch { /* ignore */ }
       setToast({ message: "Session logged!", type: "success" });
