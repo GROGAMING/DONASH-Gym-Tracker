@@ -77,7 +77,7 @@ export async function POST(req: Request) {
   const { data: existing, error: existErr } = await supabase
     .from("player_session_logs")
     .select("id")
-    .eq("team_id", TEAM_ID)
+    .eq("team_id", currentTeamId)
     .eq("player_id", playerId)
     .eq("weekly_session_id", weeklySessionId)
     .maybeSingle();
