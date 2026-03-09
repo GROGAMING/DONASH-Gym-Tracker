@@ -26,7 +26,6 @@ type AssignmentItem = {
   template_id: string;
   notes: string;
   created_at: string;
-  assigned_at: string;
   template: null | {
     id: string;
     title: string;
@@ -655,7 +654,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                     <div>
                       <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
                       <p className="text-xs text-muted-foreground">
-                        Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : "—"}
+                        Assigned {a.created_at ? new Date(a.created_at).toLocaleDateString() : "—"}
                       </p>
                     </div>
                     <button

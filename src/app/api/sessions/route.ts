@@ -11,7 +11,7 @@ type WeeklySessionRow = {
   week_start: string;
   template_id: string;
   notes: string;
-  assigned_at: string;
+  created_at: string;
   session_templates?: { id?: string; title?: string } | null;
 };
 
@@ -31,13 +31,13 @@ export async function GET() {
   );
 
   // TEAM_ID is intentional here: this endpoint is called before a player is selected.
-  // Filter by is_active=true — sessions persist until admin removes them.
+  // "Current session" = all rows for this team ordered by created_at desc.
+  // Rows remain visible until admin removes them (hard-delete).
   const { data: assigned, error: aErr } = await supabase
     .from("weekly_sessions")
-    .select("id, week_start, template_id, notes, assigned_at, session_templates(id, title)")
+    .select("id, week_start, template_id, notes, created_at, session_templates(id, title)")
     .eq("team_id", TEAM_ID)
-    .eq("is_active", true)
-    .order("assigned_at", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (aErr) {
     return NextResponse.json({ error: aErr.message }, { status: 500 });
@@ -73,7 +73,7 @@ export async function GET() {
       sessions: rows.map((a) => ({
         id: a.id,
         week_start: a.week_start,
-        assigned_at: a.assigned_at ?? null,
+        created_at: a.created_at,
         template_id: a.template_id,
         notes: a.notes ?? "",
         template_title: a.session_templates?.title ?? null,

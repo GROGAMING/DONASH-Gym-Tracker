@@ -23,7 +23,7 @@ type ApiExercise = {
 type SessionItem = {
   id: string;
   week_start: string;
-  assigned_at: string | null;
+  created_at: string | null;
   template_id: string;
   template_title: string | null;
   exercises: ApiExercise[];
@@ -140,9 +140,9 @@ export default function PlayerSessionsListScreen({ teamName }: { teamName: strin
                     <p className="font-display font-extrabold text-lg text-foreground">
                       {(s.template_title ?? "").trim().length > 0 ? s.template_title : "Active session"}
                     </p>
-                    {s.assigned_at && (
+                    {s.created_at && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        Assigned {new Date(s.assigned_at).toLocaleDateString()}
+                        Assigned {new Date(s.created_at).toLocaleDateString()}
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground mt-1">

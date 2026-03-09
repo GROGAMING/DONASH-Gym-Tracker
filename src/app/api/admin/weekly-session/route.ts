@@ -11,8 +11,6 @@ type AssignmentRow = {
   template_id: string;
   notes: string;
   created_at: string;
-  assigned_at: string;
-  is_active: boolean;
 };
 
 type TemplateRow = {
@@ -36,13 +34,13 @@ function isAdmin() {
 export async function GET(_req: NextRequest) {
   if (!isAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Return all active assignments regardless of week_start
+  // Return all rows for this team ordered by created_at desc (latest first).
+  // Rows persist until admin hard-deletes them.
   const { data: rows, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
-    .select("id, week_start, template_id, notes, created_at, assigned_at, is_active")
+    .select("id, week_start, template_id, notes, created_at")
     .eq("team_id", TEAM_ID)
-    .eq("is_active", true)
-    .order("assigned_at", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (aErr) {
     return NextResponse.json({ error: aErr.message, code: aErr.code }, { status: 500 });
@@ -89,7 +87,6 @@ export async function GET(_req: NextRequest) {
         template_id: a.template_id,
         notes: a.notes ?? "",
         created_at: a.created_at,
-        assigned_at: a.assigned_at ?? a.created_at,
         template: t
           ? {
               id: t.id,
@@ -130,7 +127,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
   }
 
-  const now = new Date().toISOString();
   const weekStart = mondayWeekStartISO(new Date());
 
   const { data: assignment, error: aErr } = await supabaseAdmin
@@ -139,10 +135,8 @@ export async function POST(req: Request) {
       team_id: TEAM_ID,
       week_start: weekStart,
       template_id: templateId,
-      is_active: true,
-      assigned_at: now,
     })
-    .select("id, week_start, template_id, notes, created_at, assigned_at, is_active")
+    .select("id, week_start, template_id, notes, created_at")
     .single();
 
   if (aErr) {
