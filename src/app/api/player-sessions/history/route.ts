@@ -23,50 +23,73 @@ export async function GET(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
+  // ── Diagnostic: count ALL rows for this player regardless of any filter ──
+  // This helps diagnose filter mismatches without breaking the response.
+  const { count: totalCount } = await supabase
+    .from("player_session_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("player_id", playerId);
+
+  // ── Fetch completed logs: is_draft = false OR completed_at IS NOT NULL ──
+  // Using or() makes this resilient to legacy rows where is_draft was never
+  // set to false (e.g. old rows that only have completed_at).
   const { data: logs, error: lErr } = await supabase
     .from("player_session_logs")
-    .select("id, created_at, completed_at, weekly_session_id")
+    .select("id, created_at, completed_at, weekly_session_id, is_draft")
     .eq("team_id", currentTeamId)
     .eq("player_id", playerId)
-    .eq("is_draft", false)
+    .or("is_draft.eq.false,completed_at.not.is.null")
     .order("completed_at", { ascending: false, nullsFirst: false });
 
-  if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
+  if (lErr) {
+    return NextResponse.json({ error: lErr.message, diagnosticTotalCount: totalCount }, { status: 500 });
+  }
 
   const logRows = (logs ?? []) as { id: string; created_at: string; completed_at: string | null; weekly_session_id: string }[];
+
+  // Return diagnostic info even when empty so we can see totalCount in network tab
+  if (logRows.length === 0) {
+    return NextResponse.json({ logs: [], diagnosticTotalCount: totalCount });
+  }
+
   const logIds = logRows.map((l) => l.id);
-  const weeklyIds = Array.from(new Set(logRows.map((l) => l.weekly_session_id)));
+  const weeklyIds = Array.from(new Set(logRows.map((l) => l.weekly_session_id).filter(Boolean)));
 
-  const { data: weeklyRows, error: wErr } = await supabase
-    .from("weekly_sessions")
-    .select("id, week_start, template_id, session_templates(id, title)")
-    .eq("team_id", currentTeamId)
-    .in("id", weeklyIds);
+  // Fetch weekly session info (best-effort — don't fail if missing)
+  let weeklyById: Record<string, any> = {};
+  if (weeklyIds.length > 0) {
+    const { data: weeklyRows } = await supabase
+      .from("weekly_sessions")
+      .select("id, week_start, template_id, session_templates(id, title)")
+      .eq("team_id", currentTeamId)
+      .in("id", weeklyIds);
 
-  if (wErr) return NextResponse.json({ error: wErr.message }, { status: 500 });
+    weeklyById = (weeklyRows ?? []).reduce<Record<string, any>>((acc, r) => {
+      acc[(r as any).id] = r;
+      return acc;
+    }, {});
+  }
 
-  const weeklyById = (weeklyRows ?? []).reduce<Record<string, any>>((acc, r) => {
-    acc[(r as any).id] = r;
-    return acc;
-  }, {});
+  // Fetch sets (best-effort)
+  let setsByLog: Record<string, any[]> = {};
+  if (logIds.length > 0) {
+    const { data: sets } = await supabase
+      .from("player_set_logs")
+      .select("id, player_session_log_id, exercise_id, exercise_name, set_number, reps, weight, created_at")
+      .eq("team_id", currentTeamId)
+      .in("player_session_log_id", logIds)
+      .order("set_number", { ascending: true });
 
-  const { data: sets, error: sErr } = await supabase
-    .from("player_set_logs")
-    .select("id, player_session_log_id, exercise_id, exercise_name, set_number, reps, weight, created_at")
-    .eq("team_id", currentTeamId)
-    .in("player_session_log_id", logIds)
-    .order("created_at", { ascending: false });
-
-  if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
-
-  const setsByLog = (sets ?? []).reduce<Record<string, any[]>>((acc, r) => {
-    const logId = (r as any).player_session_log_id as string;
-    acc[logId] = acc[logId] ?? [];
-    acc[logId].push(r);
-    return acc;
-  }, {});
+    setsByLog = (sets ?? []).reduce<Record<string, any[]>>((acc, r) => {
+      const logId = (r as any).player_session_log_id as string;
+      acc[logId] = acc[logId] ?? [];
+      acc[logId].push(r);
+      return acc;
+    }, {});
+  }
 
   return NextResponse.json({
+    diagnosticTotalCount: totalCount,
     logs: logRows.map((l) => {
       const w = weeklyById[l.weekly_session_id] as any | undefined;
       return {
