@@ -52,8 +52,8 @@ function rankLabel(rank: number) {
   return `${rank}`;
 }
 
-const LeaderRow: FC<{ entry: Row; rank: number; showQuotaTick: boolean }> = (
-  { entry, rank, showQuotaTick }: { entry: Row; rank: number; showQuotaTick: boolean },
+const LeaderRow: FC<{ entry: Row; rank: number; quota: number | null }> = (
+  { entry, rank, quota }: { entry: Row; rank: number; quota: number | null },
 ) => {
   const isTop = rank <= 3;
   const style = isTop ? RANK_STYLES[rank] : null;
@@ -90,7 +90,7 @@ const LeaderRow: FC<{ entry: Row; rank: number; showQuotaTick: boolean }> = (
           {entry.count}
         </span>
         <p className="text-[10px] text-muted-foreground leading-none mt-0.5">sessions</p>
-        {showQuotaTick && <MetQuotaTick weeklyCount={entry.count} />}
+        {quota !== null && <MetQuotaTick weeklyCount={entry.count} quota={quota} />}
       </div>
     </div>
   );
@@ -104,15 +104,17 @@ export default function LeaderboardScreen({ teamName }: { teamName: string }) {
   const [weekly, setWeekly] = useState<Row[]>([]);
   const [overall, setOverall] = useState<Row[]>([]);
   const [status, setStatus] = useState("");
+  const [quota, setQuota] = useState<number>(3);
 
   useEffect(() => {
     (async () => {
       setStatus("");
 
-      const [w, o, playersRes] = await Promise.all([
+      const [w, o, playersRes, settingsRes] = await Promise.all([
         supabase.rpc("get_leaderboard_week", { p_week_start: weekStart }),
         supabase.rpc("get_leaderboard_overall"),
         fetch("/api/players"),
+        fetch("/api/settings"),
       ]);
 
       if (w.error) return setStatus(w.error.message);
@@ -120,6 +122,11 @@ export default function LeaderboardScreen({ teamName }: { teamName: string }) {
       if (!playersRes.ok) {
         const body = (await playersRes.json().catch(() => null)) as { error?: string } | null;
         return setStatus(body?.error || "Failed to load players.");
+      }
+
+      if (settingsRes.ok) {
+        const s = (await settingsRes.json().catch(() => null)) as { value?: number } | null;
+        if (typeof s?.value === "number" && s.value >= 1) setQuota(s.value);
       }
 
       const weeklyData = (w.data ?? []) as Row[];
@@ -191,7 +198,7 @@ export default function LeaderboardScreen({ teamName }: { teamName: string }) {
 
         <div className="flex flex-col gap-2">
           {data.map((entry: Row, idx: number) => (
-            <LeaderRow key={entry.name} entry={entry} rank={idx + 1} showQuotaTick={tab === "weekly"} />
+            <LeaderRow key={entry.name} entry={entry} rank={idx + 1} quota={tab === "weekly" ? quota : null} />
           ))}
         </div>
 

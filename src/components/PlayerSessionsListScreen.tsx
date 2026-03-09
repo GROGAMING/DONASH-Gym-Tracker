@@ -23,13 +23,13 @@ type ApiExercise = {
 type SessionItem = {
   id: string;
   week_start: string;
+  created_at: string | null;
   template_id: string;
   template_title: string | null;
   exercises: ApiExercise[];
 };
 
 type ApiResponse = {
-  weekStart: string;
   sessions: SessionItem[];
   error?: string;
 };
@@ -137,11 +137,14 @@ export default function PlayerSessionsListScreen({ teamName }: { teamName: strin
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-semibold text-muted-foreground">Week starting</p>
-                    <p className="text-sm font-semibold text-foreground mt-1">{data?.weekStart}</p>
-                    <p className="font-display font-extrabold text-lg text-foreground mt-3">
-                      {(s.template_title ?? "").trim().length > 0 ? s.template_title : "This week's session"}
+                    <p className="font-display font-extrabold text-lg text-foreground">
+                      {(s.template_title ?? "").trim().length > 0 ? s.template_title : "Active session"}
                     </p>
+                    {s.created_at && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Assigned {new Date(s.created_at).toLocaleDateString()}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground mt-1">
                       {s.exercises.length} exercise{s.exercises.length === 1 ? "" : "s"}
                     </p>
