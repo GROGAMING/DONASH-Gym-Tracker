@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { TEAM_ID } from "@/lib/team";
-import { mondayWeekStartISO, mondayFromAnyDateISO } from "@/lib/week";
+import { mondayWeekStartISO } from "@/lib/week";
 
 type AssignmentRow = {
   id: string;
@@ -11,6 +11,8 @@ type AssignmentRow = {
   template_id: string;
   notes: string;
   created_at: string;
+  assigned_at: string;
+  is_active: boolean;
 };
 
 type TemplateRow = {
@@ -31,23 +33,16 @@ function isAdmin() {
   return cookies().get("admin_authed")?.value === "1";
 }
 
-function normalizeWeekStart(x: unknown): string {
-  if (typeof x === "string" && /^\d{4}-\d{2}-\d{2}$/.test(x)) return mondayFromAnyDateISO(x);
-  return mondayWeekStartISO(new Date());
-}
-
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   if (!isAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const url = new URL(req.url);
-  const weekStart = normalizeWeekStart(url.searchParams.get("weekStart"));
-
+  // Return all active assignments regardless of week_start
   const { data: rows, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
-    .select("id, week_start, template_id, notes, created_at")
+    .select("id, week_start, template_id, notes, created_at, assigned_at, is_active")
     .eq("team_id", TEAM_ID)
-    .eq("week_start", weekStart)
-    .order("created_at", { ascending: true });
+    .eq("is_active", true)
+    .order("assigned_at", { ascending: false });
 
   if (aErr) {
     return NextResponse.json({ error: aErr.message, code: aErr.code }, { status: 500 });
@@ -56,7 +51,7 @@ export async function GET(req: NextRequest) {
   const assignments = (rows ?? []) as AssignmentRow[];
 
   if (assignments.length === 0) {
-    return NextResponse.json({ weekStart, assignments: [] });
+    return NextResponse.json({ assignments: [] });
   }
 
   const templateIds = Array.from(new Set(assignments.map((a) => a.template_id)));
@@ -86,7 +81,6 @@ export async function GET(req: NextRequest) {
   }, {});
 
   return NextResponse.json({
-    weekStart,
     assignments: assignments.map((a) => {
       const t = templateMap.get(a.template_id) ?? null;
       return {
@@ -95,6 +89,7 @@ export async function GET(req: NextRequest) {
         template_id: a.template_id,
         notes: a.notes ?? "",
         created_at: a.created_at,
+        assigned_at: a.assigned_at ?? a.created_at,
         template: t
           ? {
               id: t.id,
@@ -117,10 +112,9 @@ export async function POST(req: Request) {
   if (!isAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as
-    | { weekStart?: unknown; templateId?: unknown }
+    | { templateId?: unknown }
     | null;
 
-  const weekStart = normalizeWeekStart(body?.weekStart);
   const templateId = typeof body?.templateId === "string" ? body.templateId : "";
 
   if (!templateId) return NextResponse.json({ error: "Missing templateId" }, { status: 400 });
@@ -136,10 +130,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
   }
 
+  const now = new Date().toISOString();
+  const weekStart = mondayWeekStartISO(new Date());
+
   const { data: assignment, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
-    .insert({ team_id: TEAM_ID, week_start: weekStart, template_id: templateId })
-    .select("id, week_start, template_id, notes, created_at")
+    .insert({
+      team_id: TEAM_ID,
+      week_start: weekStart,
+      template_id: templateId,
+      is_active: true,
+      assigned_at: now,
+    })
+    .select("id, week_start, template_id, notes, created_at, assigned_at, is_active")
     .single();
 
   if (aErr) {

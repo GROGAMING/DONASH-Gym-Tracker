@@ -13,9 +13,10 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const { id } = params;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
+  // Soft-delete: set is_active=false so player_session_logs FK refs are preserved
   const { error } = await supabaseAdmin
     .from("weekly_sessions")
-    .delete()
+    .update({ is_active: false })
     .eq("id", id)
     .eq("team_id", TEAM_ID);
 

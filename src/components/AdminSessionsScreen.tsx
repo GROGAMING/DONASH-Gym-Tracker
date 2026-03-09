@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 
@@ -10,7 +10,6 @@ import ExerciseCombobox from "@/components/ExerciseCombobox";
 import PageContainer from "@/components/PageContainer";
 import ToastBanner from "@/components/ToastBanner";
 import { PrimaryButton, SecondaryButton } from "@/components/GymButtons";
-import { mondayWeekStartISO, mondayFromAnyDateISO } from "@/lib/week";
 
 type ToastState = { message: string; type: "success" | "error" };
 
@@ -27,6 +26,7 @@ type AssignmentItem = {
   template_id: string;
   notes: string;
   created_at: string;
+  assigned_at: string;
   template: null | {
     id: string;
     title: string;
@@ -35,14 +35,8 @@ type AssignmentItem = {
 };
 
 type AssignmentResponse = {
-  weekStart: string;
   assignments: AssignmentItem[];
 };
-
-function toISODateInputValue(isoYYYYMMDD: string) {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(isoYYYYMMDD)) return isoYYYYMMDD;
-  return mondayWeekStartISO(new Date());
-}
 
 export default function AdminSessionsScreen({ teamName }: { teamName: string }) {
   const router = useRouter();
@@ -58,9 +52,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     { name: "", target_sets: null, target_reps: "" },
   ]);
   const [creating, setCreating] = useState(false);
-
-  const [weekStartInput, setWeekStartInput] = useState(() => mondayWeekStartISO(new Date()));
-  const normalizedWeekStart = useMemo(() => mondayFromAnyDateISO(weekStartInput), [weekStartInput]);
 
   const [assignment, setAssignment] = useState<AssignmentResponse | null>(null);
   const [loadingAssignment, setLoadingAssignment] = useState(true);
@@ -178,14 +169,14 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     router.push("/admin");
   }, [router]);
 
-  const fetchAssignment = useCallback(async (weekStart: string) => {
+  const fetchAssignment = useCallback(async () => {
     setLoadingAssignment(true);
     setAssignmentError(null);
     try {
-      const res = await fetch(`/api/admin/weekly-session?weekStart=${encodeURIComponent(weekStart)}`);
+      const res = await fetch("/api/admin/weekly-session");
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setAssignmentError(body?.error || "Failed to load weekly assignment.");
+        setAssignmentError(body?.error || "Failed to load active sessions.");
         setAssignment(null);
         return;
       }
@@ -197,7 +188,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       }
       setNotesMap(initial);
     } catch {
-      setAssignmentError("Failed to load weekly assignment.");
+      setAssignmentError("Failed to load active sessions.");
       setAssignment(null);
     } finally {
       setLoadingAssignment(false);
@@ -206,11 +197,8 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
 
   useEffect(() => {
     void fetchTemplates();
-  }, [fetchTemplates]);
-
-  useEffect(() => {
-    void fetchAssignment(normalizedWeekStart);
-  }, [fetchAssignment, normalizedWeekStart]);
+    void fetchAssignment();
+  }, [fetchTemplates, fetchAssignment]);
 
   const addExerciseRow = useCallback(() => {
     setNewExercises((prev) => [...prev, { name: "", target_sets: null, target_reps: "" }]);
@@ -296,13 +284,13 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
         return;
       }
       setToast({ message: "Session removed.", type: "success" });
-      await fetchAssignment(normalizedWeekStart);
+      await fetchAssignment();
     } catch {
       setToast({ message: "Failed to remove session.", type: "error" });
     } finally {
       setRemovingId(null);
     }
-  }, [fetchAssignment, normalizedWeekStart, removingId]);
+  }, [fetchAssignment, removingId]);
 
   const saveNotes = useCallback(async (assignmentId: string) => {
     if (savingNotesId) return;
@@ -350,7 +338,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     }
   }, [deleteTarget, deleting, fetchTemplates]);
 
-  const assignWeekly = useCallback(async () => {
+  const assignSession = useCallback(async () => {
     if (assigning) return;
 
     if (!selectedTemplateId) {
@@ -365,7 +353,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       const res = await fetch("/api/admin/weekly-session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ weekStart: normalizedWeekStart, templateId: selectedTemplateId }),
+        body: JSON.stringify({ templateId: selectedTemplateId }),
       });
 
       if (!res.ok) {
@@ -374,14 +362,15 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
         return;
       }
 
-      setToast({ message: "Weekly session assigned.", type: "success" });
-      await fetchAssignment(normalizedWeekStart);
+      setToast({ message: "Session assigned.", type: "success" });
+      setSelectedTemplateId("");
+      await fetchAssignment();
     } catch {
       setToast({ message: "Failed to assign session.", type: "error" });
     } finally {
       setAssigning(false);
     }
-  }, [assigning, fetchAssignment, normalizedWeekStart, selectedTemplateId]);
+  }, [assigning, fetchAssignment, selectedTemplateId]);
 
   return (
     <AppShell teamName={teamName}>
@@ -641,99 +630,102 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
           )}
         </div>
 
-        <div className="mt-6 bg-card border border-border rounded-2xl shadow-card p-5">
-          <p className="text-xs font-semibold text-muted-foreground mb-3">This week’s session</p>
-
-          <label className="block text-xs font-semibold text-muted-foreground mb-2">Week start</label>
-          <input
-            type="date"
-            value={toISODateInputValue(weekStartInput)}
-            onChange={(e) => setWeekStartInput(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-          />
-
-          <div className="mt-4">
-            <label className="block text-xs font-semibold text-muted-foreground mb-2">Template</label>
-            <select
-              value={selectedTemplateId}
-              onChange={(e) => setSelectedTemplateId(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-              disabled={loadingTemplates || templates.length === 0}
-            >
-              <option value="">Select a template…</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.title}</option>
-              ))}
-            </select>
+        {/* ── Active sessions ── */}
+        <div className="mt-6 bg-card border border-border rounded-2xl shadow-card overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-muted-foreground">Active sessions</p>
+            {!loadingAssignment && (
+              <span className="text-xs text-muted-foreground">
+                {assignment?.assignments.length ?? 0} active
+              </span>
+            )}
           </div>
 
-          <div className="mt-5">
-            <PrimaryButton type="button" onClick={() => void assignWeekly()} disabled={assigning} loading={assigning}>
-              Assign
-            </PrimaryButton>
-          </div>
-
-          <div className="mt-5">
-            {loadingAssignment ? (
-              <p className="text-sm text-muted-foreground">Loading current assignments…</p>
-            ) : assignmentError ? (
-              <p className="text-sm text-destructive">{assignmentError}</p>
-            ) : !assignment || assignment.assignments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No sessions assigned for this week.</p>
-            ) : (
-              <div className="space-y-3">
-                {assignment.assignments.map((a) => (
-                  <div key={a.id} className="border border-border rounded-2xl p-4 bg-background">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
-                        <p className="text-xs text-muted-foreground">Week starting {a.week_start}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void removeAssignment(a.id)}
-                        disabled={removingId === a.id}
-                        className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        {removingId === a.id ? "Removing…" : "Remove"}
-                      </button>
+          {loadingAssignment ? (
+            <p className="px-5 py-4 text-sm text-muted-foreground">Loading…</p>
+          ) : assignmentError ? (
+            <p className="px-5 py-4 text-sm text-destructive">{assignmentError}</p>
+          ) : !assignment || assignment.assignments.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-muted-foreground">No active sessions. Assign one below.</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {assignment.assignments.map((a) => (
+                <div key={a.id} className="p-4 bg-background">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : "—"}
+                      </p>
                     </div>
-                    {a.template && a.template.exercises.length > 0 && (
-                      <div className="mt-3 space-y-1">
-                        {a.template.exercises.map((ex, i) => (
-                          <p key={`${a.id}-${ex.id}`} className="text-xs text-muted-foreground">
-                            {i + 1}. {ex.name}
-                            {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
-                              ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
-                              : ""}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                    <div className="mt-3">
-                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Notes</label>
-                      <textarea
-                        value={notesMap[a.id] ?? ""}
-                        onChange={(e) => setNotesMap((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                        placeholder="Add a note visible to players…"
-                        rows={2}
-                        className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none resize-none"
-                      />
-                      <div className="mt-1.5">
-                        <SecondaryButton
-                          type="button"
-                          onClick={() => void saveNotes(a.id)}
-                          disabled={savingNotesId === a.id}
-                        >
-                          {savingNotesId === a.id ? "Saving…" : "Save notes"}
-                        </SecondaryButton>
-                      </div>
+                    <button
+                      type="button"
+                      onClick={() => void removeAssignment(a.id)}
+                      disabled={removingId === a.id}
+                      className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {removingId === a.id ? "Removing…" : "Remove"}
+                    </button>
+                  </div>
+                  {a.template && a.template.exercises.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      {a.template.exercises.map((ex, i) => (
+                        <p key={`${a.id}-${ex.id}`} className="text-xs text-muted-foreground">
+                          {i + 1}. {ex.name}
+                          {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
+                            ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
+                            : ""}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-3">
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Notes</label>
+                    <textarea
+                      value={notesMap[a.id] ?? ""}
+                      onChange={(e) => setNotesMap((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                      placeholder="Add a note visible to players…"
+                      rows={2}
+                      className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none resize-none"
+                    />
+                    <div className="mt-1.5">
+                      <SecondaryButton
+                        type="button"
+                        onClick={() => void saveNotes(a.id)}
+                        disabled={savingNotesId === a.id}
+                      >
+                        {savingNotesId === a.id ? "Saving…" : "Save notes"}
+                      </SecondaryButton>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Assign session ── */}
+        <div className="mt-4 bg-card border border-border rounded-2xl shadow-card p-5">
+          <p className="text-xs font-semibold text-muted-foreground mb-3">Assign session</p>
+
+          <label className="block text-xs font-semibold text-muted-foreground mb-2">Template</label>
+          <select
+            value={selectedTemplateId}
+            onChange={(e) => setSelectedTemplateId(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+            disabled={loadingTemplates || templates.length === 0}
+          >
+            <option value="">Select a template…</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>{t.title}</option>
+            ))}
+          </select>
+
+          <div className="mt-4">
+            <PrimaryButton type="button" onClick={() => void assignSession()} disabled={assigning || !selectedTemplateId} loading={assigning}>
+              Assign to team
+            </PrimaryButton>
           </div>
         </div>
       </PageContainer>

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 import { TEAM_ID } from "@/lib/team";
-import { mondayWeekStartISO } from "@/lib/week";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,6 +11,7 @@ type WeeklySessionRow = {
   week_start: string;
   template_id: string;
   notes: string;
+  assigned_at: string;
   session_templates?: { id?: string; title?: string } | null;
 };
 
@@ -25,32 +25,28 @@ type ExerciseRow = {
 };
 
 export async function GET() {
-  const weekStart = mondayWeekStartISO(new Date());
-
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
-  // TEAM_ID is intentional here: this endpoint is called before a player is selected
-  // (it lists available sessions for the week). There is no player context to derive
-  // team from yet. In a fully multi-tenant setup this would require a team identifier
-  // in the URL or a session cookie. For now, one deployment = one team via env var.
+  // TEAM_ID is intentional here: this endpoint is called before a player is selected.
+  // Filter by is_active=true — sessions persist until admin removes them.
   const { data: assigned, error: aErr } = await supabase
     .from("weekly_sessions")
-    .select("id, week_start, template_id, notes, session_templates(id, title)")
+    .select("id, week_start, template_id, notes, assigned_at, session_templates(id, title)")
     .eq("team_id", TEAM_ID)
-    .eq("week_start", weekStart)
-    .order("created_at", { ascending: true });
+    .eq("is_active", true)
+    .order("assigned_at", { ascending: false });
 
   if (aErr) {
-    return NextResponse.json({ error: aErr.message, weekStart }, { status: 500 });
+    return NextResponse.json({ error: aErr.message }, { status: 500 });
   }
 
   const rows = (assigned ?? []) as WeeklySessionRow[];
 
   if (rows.length === 0) {
-    return NextResponse.json({ weekStart, sessions: [] }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ sessions: [] }, { headers: { "Cache-Control": "no-store" } });
   }
 
   const templateIds = Array.from(new Set(rows.map((r) => r.template_id)));
@@ -62,7 +58,7 @@ export async function GET() {
     .order("sort_order", { ascending: true });
 
   if (eErr) {
-    return NextResponse.json({ error: eErr.message, weekStart }, { status: 500 });
+    return NextResponse.json({ error: eErr.message }, { status: 500 });
   }
 
   const exercisesByTemplate = (exercises ?? []).reduce<Record<string, ExerciseRow[]>>((acc, ex) => {
@@ -74,10 +70,10 @@ export async function GET() {
 
   return NextResponse.json(
     {
-      weekStart,
       sessions: rows.map((a) => ({
         id: a.id,
         week_start: a.week_start,
+        assigned_at: a.assigned_at ?? null,
         template_id: a.template_id,
         notes: a.notes ?? "",
         template_title: a.session_templates?.title ?? null,
