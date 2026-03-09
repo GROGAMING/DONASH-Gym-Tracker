@@ -10,7 +10,7 @@ import PageContainer from "@/components/PageContainer";
 
 // ── shared types ──────────────────────────────────────────────────────────────
 
-type Player = { id: string; name: string };
+type Player = { id: string; name: string; sessionCount: number };
 
 type SetEntry = {
   id?: string;
@@ -28,15 +28,6 @@ type ExerciseSummary = {
   last10: SetEntry[];
 };
 
-type PlayerExerciseStat = {
-  playerId: string;
-  playerName: string;
-  totalSets: number;
-  bestSet: SetEntry | null;
-  lastSet: SetEntry | null;
-  prevSet: SetEntry | null;
-};
-
 type SummaryData = {
   tab: "summary";
   totalPlayers: number;
@@ -47,7 +38,6 @@ type SummaryData = {
   mostLoggedExercise: string | null;
   mostLoggedCount: number;
   players: Player[];
-  exerciseNames: string[];
 };
 
 type PlayerData = {
@@ -57,14 +47,7 @@ type PlayerData = {
   exercises?: ExerciseSummary[];
 };
 
-type ExerciseData = {
-  tab: "exercise";
-  exerciseNames: string[];
-  exerciseName?: string;
-  players?: PlayerExerciseStat[];
-};
-
-type ApiData = SummaryData | PlayerData | ExerciseData | null;
+type ApiData = SummaryData | PlayerData | null;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -162,26 +145,14 @@ function ExerciseCard({ ex }: { ex: ExerciseSummary }) {
   );
 }
 
-function TrendBadge({ last, prev }: { last: SetEntry | null; prev: SetEntry | null }) {
-  if (!last || last.weight == null || !prev || prev.weight == null) return null;
-  const diff = last.weight - prev.weight;
-  if (diff === 0) return null;
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${diff > 0 ? "text-green-500" : "text-red-400"}`}>
-      {diff > 0 ? "▲" : "▼"} {Math.abs(diff)} kg
-    </span>
-  );
-}
-
 // ── main tabs ─────────────────────────────────────────────────────────────────
 
-type Tab = "summary" | "player" | "exercise";
+type Tab = "summary" | "player";
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: "summary", label: "Summary" },
     { id: "player", label: "By player" },
-    { id: "exercise", label: "By exercise" },
   ];
   return (
     <div className="flex gap-1 bg-secondary rounded-2xl p-1">
@@ -215,16 +186,13 @@ export default function AdminWeightsReportScreen({ teamName }: { teamName: strin
 
   const [selectedPlayer, setSelectedPlayer] = useState<string>("");
   const [playerSearch, setPlayerSearch] = useState("");
-  const [selectedExercise, setSelectedExercise] = useState<string>("");
-  const [exerciseSearch, setExerciseSearch] = useState("");
 
-  const fetch_ = useCallback(async (t: Tab, pid: string, ex: string) => {
+  const fetch_ = useCallback(async (t: Tab, pid: string) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ tab: t });
       if (t === "player" && pid) params.set("playerId", pid);
-      if (t === "exercise" && ex) params.set("exerciseName", ex);
       const res = await fetch(`/api/admin/weights-report?${params.toString()}`);
       const body = await res.json().catch(() => null);
       if (!res.ok) { setError(body?.error ?? "Failed to load."); setData(null); return; }
@@ -238,8 +206,8 @@ export default function AdminWeightsReportScreen({ teamName }: { teamName: strin
   }, []);
 
   useEffect(() => {
-    void fetch_(tab, selectedPlayer, selectedExercise);
-  }, [tab, selectedPlayer, selectedExercise, fetch_]);
+    void fetch_(tab, selectedPlayer);
+  }, [tab, selectedPlayer, fetch_]);
 
   // ── player list for tab="player" ─────────────────────────────────────────
   const players: Player[] =
@@ -249,14 +217,6 @@ export default function AdminWeightsReportScreen({ teamName }: { teamName: strin
 
   const filteredPlayers = players.filter((p) =>
     p.name.toLowerCase().includes(playerSearch.toLowerCase())
-  );
-
-  // ── exercise name list ────────────────────────────────────────────────────
-  const exerciseNames: string[] =
-    data && "exerciseNames" in data ? (data as { exerciseNames: string[] }).exerciseNames : [];
-
-  const filteredExercises = exerciseNames.filter((n) =>
-    n.toLowerCase().includes(exerciseSearch.toLowerCase())
   );
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -354,9 +314,14 @@ export default function AdminWeightsReportScreen({ teamName }: { teamName: strin
                       key={p.id}
                       type="button"
                       onClick={() => { setSelectedPlayer(p.id); setPlayerSearch(""); }}
-                      className="w-full text-left bg-card border border-border rounded-2xl shadow-card px-4 py-3 text-sm font-semibold text-foreground hover:opacity-90 transition-opacity"
+                      className="w-full text-left bg-card border border-border rounded-2xl shadow-card px-4 py-3 hover:opacity-90 transition-opacity"
                     >
-                      {p.name}
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-semibold text-foreground">{p.name}</span>
+                        <span className="shrink-0 min-w-[1.75rem] text-center text-xs font-semibold bg-secondary text-muted-foreground rounded-full px-2 py-0.5">
+                          {p.sessionCount}
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -390,92 +355,6 @@ export default function AdminWeightsReportScreen({ teamName }: { teamName: strin
             </div>
           )}
 
-          {/* ── BY EXERCISE ── */}
-          {!loading && !error && tab === "exercise" && (
-            <div className="space-y-4">
-              <SearchInput
-                placeholder="Search exercise…"
-                value={exerciseSearch}
-                onChange={setExerciseSearch}
-              />
-
-              {!selectedExercise && (
-                <div className="space-y-2">
-                  {filteredExercises.length === 0 && (
-                    <p className="text-sm text-muted-foreground px-1">No exercises found.</p>
-                  )}
-                  {filteredExercises.map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => { setSelectedExercise(n); setExerciseSearch(""); }}
-                      className="w-full text-left bg-card border border-border rounded-2xl shadow-card px-4 py-3 text-sm font-semibold text-foreground hover:opacity-90 transition-opacity"
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {selectedExercise && data?.tab === "exercise" && (() => {
-                const d = data as ExerciseData;
-                return (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-foreground">{d.exerciseName}</p>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedExercise("")}
-                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        ← Back
-                      </button>
-                    </div>
-
-                    {(!d.players || d.players.length === 0) ? (
-                      <div className="bg-card border border-border rounded-2xl shadow-card p-5">
-                        <p className="text-sm text-muted-foreground">No sets logged for this exercise.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {d.players.map((p) => (
-                          <div key={p.playerId} className="bg-card border border-border rounded-2xl shadow-card p-4">
-                            <div className="flex items-start justify-between gap-2 mb-2">
-                              <p className="text-sm font-semibold text-foreground">{p.playerName}</p>
-                              <span className="text-xs text-muted-foreground shrink-0">{p.totalSets} sets</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                              <span className="text-muted-foreground">Best set</span>
-                              <span className="font-semibold text-foreground text-right">
-                                {p.bestSet
-                                  ? `${fmtWeight(p.bestSet.weight)} × ${fmtReps(p.bestSet.reps)}`
-                                  : "—"}
-                              </span>
-                              <span className="text-muted-foreground">Last set</span>
-                              <span className="font-semibold text-foreground text-right">
-                                {p.lastSet
-                                  ? `${fmtWeight(p.lastSet.weight)} × ${fmtReps(p.lastSet.reps)}`
-                                  : "—"}
-                                {p.lastSet && <span className="ml-1 text-muted-foreground font-normal">({fmtDate(p.lastSet.created_at)})</span>}
-                              </span>
-                              {p.prevSet && (
-                                <>
-                                  <span className="text-muted-foreground">vs previous</span>
-                                  <span className="text-right">
-                                    <TrendBadge last={p.lastSet} prev={p.prevSet} />
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
         </div>
       </PageContainer>
     </AppShell>
