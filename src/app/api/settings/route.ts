@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequiredWeeklySessionsServer, setRequiredWeeklySessionsServer } from "@/lib/settings";
 import { cookies } from "next/headers";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // Helper to check admin authentication
 function isAdmin(): boolean {
   return cookies().get("admin_authed")?.value === "1";
@@ -35,24 +38,27 @@ export async function PUT(request: NextRequest) {
 
     const { value } = await request.json();
 
-    if (typeof value !== 'number' || value < 1 || value > 4) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 1 || value > 10) {
       return NextResponse.json({ 
-        error: 'Value must be between 1 and 4' 
+        error: 'Value must be between 1 and 10' 
       }, { status: 400 });
     }
 
-    await setRequiredWeeklySessionsServer(value as 1 | 2 | 3 | 4);
+    const n = Math.floor(value);
+    await setRequiredWeeklySessionsServer(n as 1 | 2 | 3 | 4);
 
     return NextResponse.json({ 
       key: "required_sessions_weekly",
-      value: value,
+      value: n,
       updated_at: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error updating settings:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error updating settings:', error);
+    }
     return NextResponse.json({ 
-      error: 'Failed to update settings',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: msg || 'Failed to update settings',
     }, { status: 500 });
   }
 }

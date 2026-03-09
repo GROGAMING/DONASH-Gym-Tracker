@@ -54,7 +54,12 @@ function WeeklyQuotaControl() {
       });
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) {
-        setErrorMsg(body?.error || "Failed to save quota.");
+        const detail = body?.error || `HTTP ${res.status}`;
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.error("Weekly quota save failed", { status: res.status, body });
+        }
+        setErrorMsg(detail);
         setStatus("error");
         return;
       }

@@ -118,30 +118,15 @@ export async function getRequiredWeeklySessionsServer(): Promise<number> {
 }
 
 // Server-side version for setting (uses admin client)
-export async function setRequiredWeeklySessionsServer(value: 1 | 2 | 3 | 4): Promise<void> {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("app_settings")
-      .upsert({
-        key: "required_sessions_weekly",
-        value_int: value,
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single();
+export async function setRequiredWeeklySessionsServer(value: number): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("app_settings")
+    .upsert(
+      { key: "required_sessions_weekly", value_int: value, updated_at: new Date().toISOString() },
+      { onConflict: "key" },
+    );
 
-    if (error) {
-      console.error("Server error setting required sessions:", {
-        message: error.message,
-        code: error.code,
-        details: error.details
-      });
-      throw error;
-    }
-
-    console.log("Server successfully updated required sessions to:", value);
-  } catch (error) {
-    console.error("Server failed to set required sessions:", error);
-    throw error;
+  if (error) {
+    throw new Error(error.message);
   }
 }
