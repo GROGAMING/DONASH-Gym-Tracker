@@ -22,9 +22,7 @@ type Template = {
 
 type AssignmentItem = {
   id: string;
-  week_start: string;
   template_id: string;
-  notes: string;
   created_at: string;
   template: null | {
     id: string;
@@ -161,8 +159,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
   }, [cancelEdit, editExercises, editTarget, editTitle, fetchTemplates, saving]);
 
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [savingNotesId, setSavingNotesId] = useState<string | null>(null);
-  const [notesMap, setNotesMap] = useState<Record<string, string>>({});
 
   const onBack = useCallback(() => {
     router.push("/admin");
@@ -181,11 +177,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       }
       const data = (await res.json()) as AssignmentResponse;
       setAssignment(data);
-      const initial: Record<string, string> = {};
-      for (const a of data.assignments) {
-        initial[a.id] = a.notes ?? "";
-      }
-      setNotesMap(initial);
     } catch {
       setAssignmentError("Failed to load active sessions.");
       setAssignment(null);
@@ -291,29 +282,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     }
   }, [fetchAssignment, removingId]);
 
-  const saveNotes = useCallback(async (assignmentId: string) => {
-    if (savingNotesId) return;
-    setSavingNotesId(assignmentId);
-    setToast(null);
-    try {
-      const res = await fetch(`/api/admin/weekly-session/${encodeURIComponent(assignmentId)}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ notes: notesMap[assignmentId] ?? "" }),
-      });
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        setToast({ message: body?.error || "Failed to save notes.", type: "error" });
-        return;
-      }
-      setToast({ message: "Notes saved.", type: "success" });
-    } catch {
-      setToast({ message: "Failed to save notes.", type: "error" });
-    } finally {
-      setSavingNotesId(null);
-    }
-  }, [notesMap, savingNotesId]);
-
   const deleteTemplate = useCallback(async () => {
     if (!deleteTarget || deleting) return;
     setDeleting(true);
@@ -386,7 +354,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
           </div>
           <div>
             <h2 className="font-display font-extrabold text-xl text-foreground leading-tight">Sessions</h2>
-            <p className="text-xs text-muted-foreground">Create templates and assign this week’s session</p>
+            <p className="text-xs text-muted-foreground">Create templates and assign persistent sessions</p>
           </div>
         </div>
 
@@ -679,25 +647,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                       ))}
                     </div>
                   )}
-                  <div className="mt-3">
-                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Notes</label>
-                    <textarea
-                      value={notesMap[a.id] ?? ""}
-                      onChange={(e) => setNotesMap((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                      placeholder="Add a note visible to players…"
-                      rows={2}
-                      className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none resize-none"
-                    />
-                    <div className="mt-1.5">
-                      <SecondaryButton
-                        type="button"
-                        onClick={() => void saveNotes(a.id)}
-                        disabled={savingNotesId === a.id}
-                      >
-                        {savingNotesId === a.id ? "Saving…" : "Save notes"}
-                      </SecondaryButton>
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>

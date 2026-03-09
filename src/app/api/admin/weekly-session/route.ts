@@ -3,13 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { TEAM_ID } from "@/lib/team";
-import { mondayWeekStartISO } from "@/lib/week";
 
 type AssignmentRow = {
   id: string;
-  week_start: string;
   template_id: string;
-  notes: string;
   created_at: string;
 };
 
@@ -34,11 +31,10 @@ function isAdmin() {
 export async function GET(_req: NextRequest) {
   if (!isAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Return all rows for this team ordered by created_at desc (latest first).
-  // Rows persist until admin hard-deletes them.
+  // Read persistent assignments from active_template_assignments.
   const { data: rows, error: aErr } = await supabaseAdmin
-    .from("weekly_sessions")
-    .select("id, week_start, template_id, notes, created_at")
+    .from("active_template_assignments")
+    .select("id, template_id, created_at")
     .eq("team_id", TEAM_ID)
     .order("created_at", { ascending: false });
 
@@ -83,9 +79,7 @@ export async function GET(_req: NextRequest) {
       const t = templateMap.get(a.template_id) ?? null;
       return {
         id: a.id,
-        week_start: a.week_start,
         template_id: a.template_id,
-        notes: a.notes ?? "",
         created_at: a.created_at,
         template: t
           ? {
@@ -127,16 +121,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
   }
 
-  const weekStart = mondayWeekStartISO(new Date());
-
+  // Upsert: if already assigned, do nothing (idempotent).
   const { data: assignment, error: aErr } = await supabaseAdmin
-    .from("weekly_sessions")
-    .insert({
-      team_id: TEAM_ID,
-      week_start: weekStart,
-      template_id: templateId,
-    })
-    .select("id, week_start, template_id, notes, created_at")
+    .from("active_template_assignments")
+    .upsert(
+      { team_id: TEAM_ID, template_id: templateId },
+      { onConflict: "team_id,template_id", ignoreDuplicates: false },
+    )
+    .select("id, template_id, created_at")
     .single();
 
   if (aErr) {
