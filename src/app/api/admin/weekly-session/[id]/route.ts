@@ -13,10 +13,8 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const { id } = params;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-  // Remove the persistent assignment. Weekly instance rows (weekly_sessions) are
-  // kept so historical player_session_logs references remain intact.
   const { error } = await supabaseAdmin
-    .from("active_template_assignments")
+    .from("weekly_sessions")
     .delete()
     .eq("id", id)
     .eq("team_id", TEAM_ID);

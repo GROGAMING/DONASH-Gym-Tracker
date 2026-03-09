@@ -28,8 +28,8 @@ export async function GET(req: NextRequest) {
     .select("id, created_at, completed_at, weekly_session_id")
     .eq("team_id", currentTeamId)
     .eq("player_id", playerId)
-    .order("created_at", { ascending: false })
-    .limit(25);
+    .eq("is_draft", false)
+    .order("completed_at", { ascending: false, nullsFirst: false });
 
   if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
 
