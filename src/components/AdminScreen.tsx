@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, BarChart2, ClipboardList, Dumbbell, ImageIcon, Settings, Users } from "lucide-react";
+import { ArrowRight, BarChart2, ClipboardList, Dumbbell, ImageIcon, Settings, TrendingUp, Users } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import AdminPlaceholder from "@/components/AdminPlaceholder";
@@ -169,6 +169,12 @@ export default function AdminScreen({ teamName, authed }: { teamName: string; au
               icon={<BarChart2 className="w-5 h-5 text-foreground" />}
               title="Weekly Report"
               description="Quota breakdown and leaderboard summary"
+            />
+            <SectionCard
+              href="/admin/weights"
+              icon={<TrendingUp className="w-5 h-5 text-foreground" />}
+              title="Weights report"
+              description="Lifting logs, volume and progress by player or exercise"
             />
             <SectionCard
               href="/admin/uploads"
