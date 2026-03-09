@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getTeamIdForPlayer } from "@/lib/resolveTeam";
 
 export const dynamic = "force-dynamic";
@@ -23,45 +24,94 @@ export async function GET(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
-  // ── Diagnostic: count ALL rows for this player regardless of any filter ──
-  // This helps diagnose filter mismatches without breaking the response.
-  const { count: totalCount } = await supabase
-    .from("player_session_logs")
-    .select("id", { count: "exact", head: true })
-    .eq("player_id", playerId);
+  // ── Diagnostic counts (all run in parallel, never block the response) ──
+  const [totalRes, withTeamRes, notDraftRes, withCompletedRes] = await Promise.all([
+    // 1. Total rows for this player regardless of any filter
+    supabaseAdmin
+      .from("player_session_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("player_id", playerId),
+    // 2. Rows where team_id matches currentTeamId
+    supabaseAdmin
+      .from("player_session_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("player_id", playerId)
+      .eq("team_id", currentTeamId),
+    // 3. Rows where is_draft = false
+    supabaseAdmin
+      .from("player_session_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("player_id", playerId)
+      .eq("is_draft", false),
+    // 4. Rows where completed_at IS NOT NULL
+    supabaseAdmin
+      .from("player_session_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("player_id", playerId)
+      .not("completed_at", "is", null),
+  ]);
 
-  // ── Fetch completed logs: is_draft = false OR completed_at IS NOT NULL ──
-  // Using or() makes this resilient to legacy rows where is_draft was never
-  // set to false (e.g. old rows that only have completed_at).
-  const { data: logs, error: lErr } = await supabase
+  const diag = {
+    total: totalRes.count ?? 0,
+    withTeamId: withTeamRes.count ?? 0,
+    isDraftFalse: notDraftRes.count ?? 0,
+    completedAtNotNull: withCompletedRes.count ?? 0,
+  };
+
+  // ── Safe one-time backfill for legacy rows (admin client, no RLS) ──
+  // Pattern: rows for this player where is_draft IS NULL → set is_draft = false
+  // (happens when is_draft column was added AFTER rows were inserted, so DEFAULT
+  //  never ran for existing rows and the column landed as NULL in practice)
+  // Also patch team_id = currentTeamId where it is null.
+  // These UPDATEs are idempotent and only affect rows needing repair.
+  await Promise.all([
+    supabaseAdmin
+      .from("player_session_logs")
+      .update({ is_draft: false })
+      .eq("player_id", playerId)
+      .is("is_draft", null)
+      .not("completed_at", "is", null),
+    supabaseAdmin
+      .from("player_session_logs")
+      .update({ team_id: currentTeamId })
+      .eq("player_id", playerId)
+      .is("team_id", null),
+  ]);
+
+  // ── Main query: filter by player_id + completed signal ──
+  // We do NOT hard-require team_id here so legacy rows (wrong/missing team_id)
+  // are still returned. We trust player_id as the primary key for ownership.
+  // Include a row if ANY of these is true:
+  //   is_draft = false   (normal completed row)
+  //   is_draft IS NULL   (legacy row inserted before the column existed)
+  //   completed_at IS NOT NULL  (belt-and-suspenders for any edge case)
+  const { data: logs, error: lErr } = await supabaseAdmin
     .from("player_session_logs")
-    .select("id, created_at, completed_at, weekly_session_id, is_draft")
-    .eq("team_id", currentTeamId)
+    .select("id, created_at, completed_at, weekly_session_id, is_draft, team_id")
     .eq("player_id", playerId)
-    .or("is_draft.eq.false,completed_at.not.is.null")
-    .order("completed_at", { ascending: false, nullsFirst: false });
+    .or("is_draft.eq.false,is_draft.is.null,completed_at.not.is.null")
+    .order("completed_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
 
   if (lErr) {
-    return NextResponse.json({ error: lErr.message, diagnosticTotalCount: totalCount }, { status: 500 });
+    return NextResponse.json({ error: lErr.message, diag }, { status: 500 });
   }
 
-  const logRows = (logs ?? []) as { id: string; created_at: string; completed_at: string | null; weekly_session_id: string }[];
+  const logRows = (logs ?? []) as { id: string; created_at: string; completed_at: string | null; weekly_session_id: string; team_id: string | null }[];
 
-  // Return diagnostic info even when empty so we can see totalCount in network tab
   if (logRows.length === 0) {
-    return NextResponse.json({ logs: [], diagnosticTotalCount: totalCount });
+    return NextResponse.json({ logs: [], diag });
   }
 
   const logIds = logRows.map((l) => l.id);
   const weeklyIds = Array.from(new Set(logRows.map((l) => l.weekly_session_id).filter(Boolean)));
 
-  // Fetch weekly session info (best-effort — don't fail if missing)
+  // Fetch weekly session info (best-effort — no team_id filter so legacy rows resolve)
   let weeklyById: Record<string, any> = {};
   if (weeklyIds.length > 0) {
-    const { data: weeklyRows } = await supabase
+    const { data: weeklyRows } = await supabaseAdmin
       .from("weekly_sessions")
       .select("id, week_start, template_id, session_templates(id, title)")
-      .eq("team_id", currentTeamId)
       .in("id", weeklyIds);
 
     weeklyById = (weeklyRows ?? []).reduce<Record<string, any>>((acc, r) => {
@@ -70,13 +120,12 @@ export async function GET(req: NextRequest) {
     }, {});
   }
 
-  // Fetch sets (best-effort)
+  // Fetch sets (best-effort — no team_id filter)
   let setsByLog: Record<string, any[]> = {};
   if (logIds.length > 0) {
-    const { data: sets } = await supabase
+    const { data: sets } = await supabaseAdmin
       .from("player_set_logs")
       .select("id, player_session_log_id, exercise_id, exercise_name, set_number, reps, weight, created_at")
-      .eq("team_id", currentTeamId)
       .in("player_session_log_id", logIds)
       .order("set_number", { ascending: true });
 
@@ -89,7 +138,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    diagnosticTotalCount: totalCount,
+    diag,
     logs: logRows.map((l) => {
       const w = weeklyById[l.weekly_session_id] as any | undefined;
       return {
