@@ -42,36 +42,7 @@ export async function GET(req: NextRequest) {
   const tab = url.searchParams.get("tab") ?? "summary";          // summary | player
   const playerId = url.searchParams.get("playerId") ?? "";
 
-  // ── 1. Fetch all session logs for this team ──────────────────────────────
-  const { data: sessionLogs, error: slErr } = await supabaseAdmin
-    .from("player_session_logs")
-    .select("id, player_id, created_at")
-    .eq("team_id", TEAM_ID)
-    .order("created_at", { ascending: false });
-
-  if (slErr) return NextResponse.json({ error: slErr.message }, { status: 500 });
-
-  const allSessionLogs = (sessionLogs ?? []) as SessionLogRow[];
-  const sessionLogIds = allSessionLogs.map((s) => s.id);
-
-  // ── 2. Fetch all set logs ────────────────────────────────────────────────
-  let setQuery = supabaseAdmin
-    .from("player_set_logs")
-    .select("id, player_session_log_id, exercise_id, exercise_name, set_number, reps, weight, created_at")
-    .eq("team_id", TEAM_ID)
-    .order("created_at", { ascending: false });
-
-  if (sessionLogIds.length > 0) {
-    setQuery = setQuery.in("player_session_log_id", sessionLogIds);
-  } else {
-    return NextResponse.json(buildEmpty());
-  }
-
-  const { data: setLogs, error: setErr } = await setQuery;
-  if (setErr) return NextResponse.json({ error: setErr.message }, { status: 500 });
-  const allSetLogs = (setLogs ?? []) as SetLogRow[];
-
-  // ── 3. Fetch players ─────────────────────────────────────────────────────
+  // ── 1. Fetch players ──────────────────────────────────────────────────────
   const { data: users, error: uErr } = await supabaseAdmin
     .from("users")
     .select("id, name")
@@ -82,12 +53,15 @@ export async function GET(req: NextRequest) {
   const allUsers = (users ?? []) as UserRow[];
   const userMap = new Map(allUsers.map((u) => [u.id, u.name]));
 
-  // ── 4. Session counts per player (completed only, one query) ─────────────
+  // ── 2. Session counts per player (non-draft rows = completed sessions) ────
+  //    is_draft = false is the reliable signal: /api/player-sessions/log always
+  //    inserts without is_draft (defaults false). Drafts are inserted with
+  //    is_draft = true and completed_at = null.
   const { data: completedSessions, error: csErr } = await supabaseAdmin
     .from("player_session_logs")
     .select("player_id")
     .eq("team_id", TEAM_ID)
-    .not("completed_at", "is", null);
+    .eq("is_draft", false);
 
   if (csErr) return NextResponse.json({ error: csErr.message }, { status: 500 });
 
@@ -102,6 +76,36 @@ export async function GET(req: NextRequest) {
     name: u.name,
     sessionCount: sessionCountByPlayer.get(u.id) ?? 0,
   }));
+
+  // ── 3. Fetch all session logs for this team ──────────────────────────────
+  const { data: sessionLogs, error: slErr } = await supabaseAdmin
+    .from("player_session_logs")
+    .select("id, player_id, created_at")
+    .eq("team_id", TEAM_ID)
+    .order("created_at", { ascending: false });
+
+  if (slErr) return NextResponse.json({ error: slErr.message }, { status: 500 });
+
+  const allSessionLogs = (sessionLogs ?? []) as SessionLogRow[];
+  const sessionLogIds = allSessionLogs.map((s) => s.id);
+
+  // ── 4. Fetch all set logs ────────────────────────────────────────────────
+  //    Short-circuit if there are no session logs yet, but still return
+  //    players with their counts (they may have completed sessions but no sets).
+  if (sessionLogIds.length === 0) {
+    return NextResponse.json(buildEmptyWithPlayers(playersWithCounts));
+  }
+
+  let setQuery = supabaseAdmin
+    .from("player_set_logs")
+    .select("id, player_session_log_id, exercise_id, exercise_name, set_number, reps, weight, created_at")
+    .eq("team_id", TEAM_ID)
+    .in("player_session_log_id", sessionLogIds)
+    .order("created_at", { ascending: false });
+
+  const { data: setLogs, error: setErr } = await setQuery;
+  if (setErr) return NextResponse.json({ error: setErr.message }, { status: 500 });
+  const allSetLogs = (setLogs ?? []) as SetLogRow[];
 
   // ── session log → player map ─────────────────────────────────────────────
   const sessionToPlayer = new Map(allSessionLogs.map((s) => [s.id, s.player_id]));
@@ -221,16 +225,16 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: "Unknown tab" }, { status: 400 });
 }
 
-function buildEmpty() {
+function buildEmptyWithPlayers(players: { id: string; name: string; sessionCount: number }[]) {
   return {
     tab: "summary",
-    totalPlayers: 0,
+    totalPlayers: players.length,
     pctLoggedLast7Days: 0,
     playersLoggedLast7Days: 0,
     totalSets: 0,
     totalVolume: 0,
     mostLoggedExercise: null,
     mostLoggedCount: 0,
-    players: [],
+    players,
   };
 }
