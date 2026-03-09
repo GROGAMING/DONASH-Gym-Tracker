@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, BarChart2, ClipboardList, ImageIcon, Settings, Users } from "lucide-react";
+import { ArrowRight, BarChart2, ClipboardList, Dumbbell, ImageIcon, Settings, Users } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import AdminPlaceholder from "@/components/AdminPlaceholder";
@@ -157,6 +157,12 @@ export default function AdminScreen({ teamName, authed }: { teamName: string; au
               icon={<ClipboardList className="w-5 h-5 text-foreground" />}
               title="Sessions"
               description="Create templates and assign weekly sessions"
+            />
+            <SectionCard
+              href="/admin/exercises"
+              icon={<Dumbbell className="w-5 h-5 text-foreground" />}
+              title="Exercises"
+              description="Manage the exercise library for session templates"
             />
             <SectionCard
               href="/admin/report"

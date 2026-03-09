@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
+import { ClipboardList, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
@@ -76,9 +76,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
   const [editTitle, setEditTitle] = useState("");
   const [editExercises, setEditExercises] = useState<{ name: string; target_sets: number | null; target_reps: string }[]>([]);
   const [saving, setSaving] = useState(false);
-
-  const [newPlayerName, setNewPlayerName] = useState("");
-  const [addingPlayer, setAddingPlayer] = useState(false);
 
   const startEdit = useCallback((t: Template) => {
     setEditTarget(t);
@@ -385,50 +382,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
       setAssigning(false);
     }
   }, [assigning, fetchAssignment, normalizedWeekStart, selectedTemplateId]);
-
-  const addPlayer = useCallback(async () => {
-    if (addingPlayer) return;
-
-    const name = newPlayerName.trim();
-    if (!name) {
-      setToast({ message: "Enter a player name.", type: "error" });
-      return;
-    }
-
-    setAddingPlayer(true);
-    setToast(null);
-
-    try {
-      const res = await fetch("/api/admin/players", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-
-      const body = (await res.json().catch(() => null)) as { error?: string; id?: string; name?: string; warning?: string } | null;
-
-      if (!res.ok) {
-        if (process.env.NODE_ENV !== "production") {
-          // eslint-disable-next-line no-console
-          console.error("Add player failed", { status: res.status, body });
-        }
-        setToast({ message: body?.error || "Failed to add player.", type: "error" });
-        return;
-      }
-
-      const addedName = body?.name || name;
-      setToast({ message: `Player "${addedName}" added.${body?.warning ? " (" + body.warning + ")" : ""}`, type: "success" });
-      setNewPlayerName("");
-    } catch (err) {
-      if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
-        console.error("Add player exception", err);
-      }
-      setToast({ message: "Failed to add player.", type: "error" });
-    } finally {
-      setAddingPlayer(false);
-    }
-  }, [addingPlayer, newPlayerName]);
 
   return (
     <AppShell teamName={teamName}>
@@ -781,34 +734,6 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                 ))}
               </div>
             )}
-          </div>
-        </div>
-        <div className="mt-6 bg-card border border-border rounded-2xl shadow-card p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <UserPlus className="w-4 h-4 text-muted-foreground" />
-            <p className="text-xs font-semibold text-muted-foreground">Add player</p>
-          </div>
-
-          <label className="block text-xs font-semibold text-muted-foreground mb-2">Player name</label>
-          <input
-            value={newPlayerName}
-            onChange={(e) => setNewPlayerName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void addPlayer();
-              }
-            }}
-            placeholder="e.g. John Smith"
-            className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-            disabled={addingPlayer}
-          />
-
-          <div className="mt-4">
-            <PrimaryButton type="button" onClick={() => void addPlayer()} disabled={addingPlayer} loading={addingPlayer}>
-              <UserPlus className="w-4 h-4" />
-              Add player
-            </PrimaryButton>
           </div>
         </div>
       </PageContainer>
