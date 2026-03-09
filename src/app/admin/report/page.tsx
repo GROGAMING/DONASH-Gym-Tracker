@@ -39,13 +39,15 @@ export default function AdminReportPage() {
   const [overall, setOverall] = useState<{ name: string; count: number }[]>([]);
   const [users, setUsers] = useState<{ name: string }[]>([]);
   const [status, setStatus] = useState("");
+  const [quota, setQuota] = useState(3);
 
   const load = async () => {
     setStatus("");
-    const [w, o, playersRes] = await Promise.all([
+    const [w, o, playersRes, settingsRes] = await Promise.all([
       supabase.rpc("get_leaderboard_week", { p_week_start: weekStart }),
       supabase.rpc("get_leaderboard_overall"),
-      fetch("/api/players")
+      fetch("/api/players"),
+      fetch("/api/settings"),
     ]);
 
     if (w.error) return setStatus(w.error.message);
@@ -54,26 +56,29 @@ export default function AdminReportPage() {
 
     const players = (await playersRes.json()) as Array<{ id: string; name: string }>;
 
+    if (settingsRes.ok) {
+      const s = (await settingsRes.json().catch(() => null)) as { value?: number } | null;
+      if (typeof s?.value === "number" && s.value >= 1) setQuota(s.value);
+    }
+
     const weeklyData = (w.data ?? []) as { name: string; count: number }[];
     const overallData = (o.data ?? []) as { name: string; count: number }[];
     const allUsers = players.map((p) => ({ name: p.name }));
-    
+
     setUsers(allUsers);
-    
-    // Merge weekly data with all users (show 0 for users with no sessions)
+
     const weeklyMap = new Map(weeklyData.map(r => [r.name, r.count]));
     const weeklyWithAll = allUsers.map(user => ({
       name: user.name,
       count: weeklyMap.get(user.name) ?? 0
     })).sort((a, b) => b.count - a.count);
-    
-    // Merge overall data with all users (show 0 for users with no sessions)
+
     const overallMap = new Map(overallData.map(r => [r.name, r.count]));
     const overallWithAll = allUsers.map(user => ({
       name: user.name,
       count: overallMap.get(user.name) ?? 0
     })).sort((a, b) => b.count - a.count);
-    
+
     setWeekly(weeklyWithAll);
     setOverall(overallWithAll);
   };
@@ -87,9 +92,6 @@ export default function AdminReportPage() {
     load();
   }, []);
 
-  const weeklyMap = new Map(weekly.map((r: { name: string; count: number }) => [r.name, r.count]));
-  const met = users.map((u: { name: string }) => u.name).filter((n: string) => (weeklyMap.get(n) ?? 0) >= 2);
-  const notMet = users.map((u: { name: string }) => u.name).filter((n: string) => (weeklyMap.get(n) ?? 0) < 2);
 
   const handleWeekChange = (v: string) => {
     setDateInWeek(v);
@@ -125,7 +127,7 @@ export default function AdminReportPage() {
       {status && <p style={{ color: "red" }}>{status}</p>}
 
       <div style={{ marginTop: 24 }}>
-        <ReportQuota weekly={weekly} overall={overall} users={users} />
+        <ReportQuota weekly={weekly} overall={overall} users={users} quota={quota} />
 
         <h3>This week leaderboard</h3>
         <ol>

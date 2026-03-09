@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import PDFDocument from "pdfkit";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { TEAM_NAME } from "@/lib/team";
+import { getRequiredWeeklySessionsServer } from "@/lib/settings";
 
 export async function GET(req: Request) {
   const authed = cookies().get("admin_authed")?.value === "1";
@@ -23,10 +24,11 @@ export async function GET(req: Request) {
     });
   }
 
-  const [weekly, overall, users] = await Promise.all([
+  const [weekly, overall, users, quota] = await Promise.all([
     supabaseAdmin.rpc("get_leaderboard_week", { p_week_start: weekStart }),
     supabaseAdmin.rpc("get_leaderboard_overall"),
-    supabaseAdmin.from("users").select("name").order("name")
+    supabaseAdmin.from("users").select("name").order("name"),
+    getRequiredWeeklySessionsServer(),
   ]);
 
   const errMsg = weekly.error?.message || overall.error?.message || users.error?.message;
@@ -40,10 +42,11 @@ export async function GET(req: Request) {
   const weeklyRows = (weekly.data ?? []) as { name: string; count: number }[];
   const overallRows = (overall.data ?? []) as { name: string; count: number }[];
   const allNames = ((users.data ?? []) as { name: string }[]).map((x) => x.name);
+  const requiredSessions = typeof quota === "number" && quota >= 1 ? quota : 3;
 
   const weeklyMap = new Map(weeklyRows.map((r) => [r.name, r.count]));
-  const met = allNames.filter((n) => (weeklyMap.get(n) ?? 0) >= 2);
-  const notMet = allNames.filter((n) => (weeklyMap.get(n) ?? 0) < 2);
+  const met = allNames.filter((n) => (weeklyMap.get(n) ?? 0) >= requiredSessions);
+  const notMet = allNames.filter((n) => (weeklyMap.get(n) ?? 0) < requiredSessions);
 
   const doc = new PDFDocument({ margin: 40 });
 
@@ -79,12 +82,12 @@ export async function GET(req: Request) {
       }
       doc.moveDown();
 
-      doc.fontSize(14).text("Met 2 this week");
+      doc.fontSize(14).text(`Met quota (${requiredSessions}) this week`);
       doc.moveDown(0.5);
       doc.fontSize(12).text(met.length ? met.join(", ") : "None");
       doc.moveDown();
 
-      doc.fontSize(14).text("Did not meet 2 this week");
+      doc.fontSize(14).text(`Did not meet quota (${requiredSessions}) this week`);
       doc.moveDown(0.5);
       doc.fontSize(12).text(notMet.length ? notMet.join(", ") : "None");
 

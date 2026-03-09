@@ -1,16 +1,12 @@
 "use client";
 
-import { getWeeklyRequiredSessions } from "@/lib/weeklyQuotaSimple";
-
 interface MetQuotaTickProps {
   weeklyCount: number;
+  quota: number;
 }
 
-export default function MetQuotaTick({ weeklyCount }: MetQuotaTickProps) {
-  const required = getWeeklyRequiredSessions();
-  const met = (weeklyCount ?? 0) >= required;
-  
+export default function MetQuotaTick({ weeklyCount, quota }: MetQuotaTickProps) {
+  const met = (weeklyCount ?? 0) >= quota;
   if (!met) return null;
-  
   return <span className="met-quota">✅</span>;
 }
