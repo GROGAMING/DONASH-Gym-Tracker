@@ -309,44 +309,51 @@ function BlockBuilder({
         return (
           <div key={block._key} className={`rounded-2xl border-2 ${col.border} ${col.bg} overflow-hidden`}>
             {/* Block header */}
-            <div className={`flex items-center gap-2 px-4 py-3 border-b ${col.border}`}>
-              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${col.dot}`} />
-              <input
-                value={block.label}
-                onChange={(e) => updateBlock(block._key, { label: e.target.value })}
-                disabled={disabled}
-                className={`flex-1 text-sm font-bold bg-transparent outline-none ${col.text} placeholder:text-current placeholder:opacity-40`}
-                placeholder="Block name…"
-              />
-              <select
-                value={block.color}
-                onChange={(e) => updateBlock(block._key, { color: e.target.value as BlockColor })}
-                disabled={disabled}
-                className={`text-xs bg-transparent border border-current/20 rounded-lg px-2 py-1 outline-none ${col.text}`}
-              >
-                {BLOCK_PRESETS.map((p) => (
-                  <option key={p.color} value={p.color}>{p.label}</option>
-                ))}
-              </select>
-              <button type="button" onClick={() => moveBlock(block._key, -1)} disabled={disabled || bi === 0}
-                className="shrink-0 p-1 rounded-lg hover:bg-black/10 disabled:opacity-30 transition-colors">
-                <ChevronUp className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => moveBlock(block._key, 1)} disabled={disabled || bi === blocks.length - 1}
-                className="shrink-0 p-1 rounded-lg hover:bg-black/10 disabled:opacity-30 transition-colors">
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => removeBlock(block._key)} disabled={disabled || blocks.length <= 1}
-                className="shrink-0 p-1 rounded-lg hover:bg-black/10 disabled:opacity-30 transition-colors text-red-500">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+            <div className={`px-3 py-2.5 border-b ${col.border}`}>
+              {/* Row 1: dot + name + color select */}
+              <div className="flex items-center gap-2 min-w-0">
+                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${col.dot}`} />
+                <input
+                  value={block.label}
+                  onChange={(e) => updateBlock(block._key, { label: e.target.value })}
+                  disabled={disabled}
+                  className={`flex-1 min-w-0 text-sm font-bold bg-transparent outline-none ${col.text} placeholder:text-current placeholder:opacity-40`}
+                  placeholder="Block name…"
+                />
+                <select
+                  value={block.color}
+                  onChange={(e) => updateBlock(block._key, { color: e.target.value as BlockColor })}
+                  disabled={disabled}
+                  className={`shrink-0 text-xs bg-transparent border border-current/20 rounded-lg px-1.5 py-1 outline-none ${col.text} max-w-[110px]`}
+                >
+                  {BLOCK_PRESETS.map((p) => (
+                    <option key={p.color} value={p.color}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Row 2: action buttons */}
+              <div className="flex items-center gap-1 mt-1.5 pl-4">
+                <button type="button" onClick={() => moveBlock(block._key, -1)} disabled={disabled || bi === 0}
+                  className="p-1 rounded-lg hover:bg-black/10 disabled:opacity-30 transition-colors">
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => moveBlock(block._key, 1)} disabled={disabled || bi === blocks.length - 1}
+                  className="p-1 rounded-lg hover:bg-black/10 disabled:opacity-30 transition-colors">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => removeBlock(block._key)} disabled={disabled || blocks.length <= 1}
+                  className="p-1 rounded-lg hover:bg-black/10 disabled:opacity-30 transition-colors text-red-500 ml-auto">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {/* Block settings row */}
-            <div className={`flex items-center gap-3 px-4 py-2 border-b ${col.border} flex-wrap`}>
+            <div className={`px-3 py-2 border-b ${col.border} space-y-2`}>
               {/* Group type — only for non-conditioning */}
               {!isConditioning && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className={`text-xs ${col.text} opacity-70 shrink-0 mr-1`}>Type:</span>
                   {GROUP_TYPE_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
@@ -355,7 +362,7 @@ function BlockBuilder({
                       onClick={() => updateBlock(block._key, { group_type: opt.value })}
                       className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
                         block.group_type === opt.value
-                          ? `${col.dot.replace("bg-", "bg-")} bg-black/10 border-current/30 ${col.text}`
+                          ? `bg-black/10 border-current/30 ${col.text}`
                           : "border-transparent text-muted-foreground hover:bg-black/5"
                       }`}
                     >
@@ -365,15 +372,15 @@ function BlockBuilder({
                 </div>
               )}
               {/* Rest between sets */}
-              <div className="flex items-center gap-1.5 ml-auto">
+              <div className="flex items-center gap-2">
                 <label className={`text-xs ${col.text} opacity-70 shrink-0`}>Rest between sets:</label>
                 <input
                   value={restSecondsToMins(block.rest_seconds)}
                   onChange={(e) => updateBlock(block._key, { rest_seconds: restMinsToSeconds(e.target.value) })}
-                  placeholder="mins"
+                  placeholder="—"
                   inputMode="decimal"
                   disabled={disabled}
-                  className="w-16 px-2 py-1 rounded-lg border border-border bg-background text-foreground text-xs outline-none text-center"
+                  className="w-14 px-2 py-1 rounded-lg border border-border bg-background text-foreground text-xs outline-none text-center"
                 />
                 <span className={`text-xs ${col.text} opacity-70`}>mins</span>
               </div>
@@ -383,9 +390,9 @@ function BlockBuilder({
             <div className="px-4 py-3 space-y-3">
               {block.exercises.map((ex, ei) => (
                 <div key={ex._key} className="bg-white/60 dark:bg-black/20 rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-1.5 mb-2 min-w-0">
                     <GripVertical className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs font-semibold text-muted-foreground flex-1">
+                    <span className="text-xs font-semibold text-muted-foreground flex-1 min-w-0 truncate">
                       {gtLabel && block.exercises.length > 1
                         ? `${gtLabel} — ${exLabel} ${ei + 1}`
                         : block.exercises.length > 1
@@ -393,15 +400,15 @@ function BlockBuilder({
                         : exLabel}
                     </span>
                     <button type="button" onClick={() => moveExercise(block._key, ex._key, -1)} disabled={disabled || ei === 0}
-                      className="p-0.5 rounded hover:bg-black/10 disabled:opacity-30">
+                      className="shrink-0 p-1 rounded hover:bg-black/10 disabled:opacity-30">
                       <ChevronUp className="w-3 h-3" />
                     </button>
                     <button type="button" onClick={() => moveExercise(block._key, ex._key, 1)} disabled={disabled || ei === block.exercises.length - 1}
-                      className="p-0.5 rounded hover:bg-black/10 disabled:opacity-30">
+                      className="shrink-0 p-1 rounded hover:bg-black/10 disabled:opacity-30">
                       <ChevronDown className="w-3 h-3" />
                     </button>
                     <button type="button" onClick={() => removeExercise(block._key, ex._key)} disabled={disabled || block.exercises.length <= 1}
-                      className="p-0.5 rounded hover:bg-black/10 disabled:opacity-30 text-red-500">
+                      className="shrink-0 p-1 rounded hover:bg-black/10 disabled:opacity-30 text-red-500">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
@@ -416,44 +423,42 @@ function BlockBuilder({
                   {isConditioning ? (
                     /* ── Conditioning fields ── */
                     <div className="mt-2 space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          value={ex.cond_rounds}
-                          onChange={(e) => updateExercise(block._key, ex._key, { cond_rounds: e.target.value })}
-                          placeholder="Rounds / intervals"
-                          disabled={disabled}
-                          className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
-                        />
-                        <input
-                          value={ex.cond_distance}
-                          onChange={(e) => updateExercise(block._key, ex._key, { cond_distance: e.target.value })}
-                          placeholder="Distance (e.g. 400m)"
-                          disabled={disabled}
-                          className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
-                        />
-                      </div>
+                      <input
+                        value={ex.cond_rounds}
+                        onChange={(e) => updateExercise(block._key, ex._key, { cond_rounds: e.target.value })}
+                        placeholder="Rounds / intervals"
+                        disabled={disabled}
+                        className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                      />
+                      <input
+                        value={ex.cond_distance}
+                        onChange={(e) => updateExercise(block._key, ex._key, { cond_distance: e.target.value })}
+                        placeholder="Distance (e.g. 400m)"
+                        disabled={disabled}
+                        className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                      />
                       <div className="grid grid-cols-2 gap-2">
                         <input
                           value={ex.cond_work}
                           onChange={(e) => updateExercise(block._key, ex._key, { cond_work: e.target.value })}
-                          placeholder="Work (e.g. 30s, max watts)"
+                          placeholder="Work (e.g. 30s)"
                           disabled={disabled}
-                          className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
                         />
                         <input
                           value={ex.cond_rest}
                           onChange={(e) => updateExercise(block._key, ex._key, { cond_rest: e.target.value })}
                           placeholder="Rest (e.g. 30s)"
                           disabled={disabled}
-                          className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
                         />
                       </div>
                       <input
                         value={ex.cond_notes}
                         onChange={(e) => updateExercise(block._key, ex._key, { cond_notes: e.target.value })}
-                        placeholder="Intensity / notes (e.g. max watts, 85% effort)"
+                        placeholder="Intensity / notes"
                         disabled={disabled}
-                        className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                        className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
                       />
                     </div>
                   ) : (
@@ -466,17 +471,17 @@ function BlockBuilder({
                           const n = v === "" ? null : Number(v);
                           updateExercise(block._key, ex._key, { target_sets: Number.isFinite(n as number) ? (n as number) : null });
                         }}
-                        placeholder="Sets (e.g. 3)"
+                        placeholder="Sets"
                         inputMode="numeric"
                         disabled={disabled}
-                        className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                        className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
                       />
                       <input
                         value={ex.target_reps}
                         onChange={(e) => updateExercise(block._key, ex._key, { target_reps: e.target.value })}
-                        placeholder='Reps (e.g. "6" or "8-10")'
+                        placeholder="Reps"
                         disabled={disabled}
-                        className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                        className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
                       />
                     </div>
                   )}
