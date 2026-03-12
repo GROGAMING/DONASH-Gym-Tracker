@@ -35,12 +35,22 @@ const BLOCK_COLORS: Record<BlockColor, { bg: string; border: string; text: strin
   extra:        { bg: "bg-pink-50 dark:bg-pink-950",    border: "border-pink-300 dark:border-pink-700",  text: "text-pink-800 dark:text-pink-300",  dot: "bg-pink-500" },
 };
 
+// ─── Group type ───────────────────────────────────────────────────────────
+type GroupType = "standard" | "superset" | "triset";
+
 // ─── Exercise row (within a block) ────────────────────────────────────────
 type ExerciseRow = {
   _key: string;
   name: string;
+  // Strength fields
   target_sets: number | null;
   target_reps: string;
+  // Conditioning fields (only used when block.color === "conditioning")
+  cond_rounds: string;
+  cond_work: string;
+  cond_rest: string;
+  cond_distance: string;
+  cond_notes: string;
   coaching_notes: string;
 };
 
@@ -49,18 +59,57 @@ type Block = {
   _key: string;
   label: string;
   color: BlockColor;
-  rest_seconds: number | null;
+  rest_seconds: number | null; // stored as seconds, edited as minutes
+  group_type: GroupType;
   exercises: ExerciseRow[];
 };
 
 function newKey() { return `${Date.now()}-${Math.random()}`; }
 
 function newExerciseRow(): ExerciseRow {
-  return { _key: newKey(), name: "", target_sets: null, target_reps: "", coaching_notes: "" };
+  return { _key: newKey(), name: "", target_sets: null, target_reps: "", cond_rounds: "", cond_work: "", cond_rest: "", cond_distance: "", cond_notes: "", coaching_notes: "" };
 }
 
 function newBlock(preset: { color: BlockColor; label: string }): Block {
-  return { _key: newKey(), label: preset.label, color: preset.color, rest_seconds: null, exercises: [newExerciseRow()] };
+  return { _key: newKey(), label: preset.label, color: preset.color, rest_seconds: null, group_type: "standard", exercises: [newExerciseRow()] };
+}
+
+// Encode group_type into block_label using a || separator
+function encodeBlockLabel(label: string, group_type: GroupType): string {
+  if (group_type === "standard") return label;
+  return `${label}||${group_type}`;
+}
+
+function decodeBlockLabel(encoded: string): { label: string; group_type: GroupType } {
+  const sep = encoded.indexOf("||");
+  if (sep === -1) return { label: encoded, group_type: "standard" };
+  const gt = encoded.slice(sep + 2) as GroupType;
+  const validGt: GroupType[] = ["standard", "superset", "triset"];
+  return { label: encoded.slice(0, sep), group_type: validGt.includes(gt) ? gt : "standard" };
+}
+
+// Encode conditioning fields into target_reps as JSON when block is conditioning
+function encodeCondReps(ex: ExerciseRow, isConditioning: boolean): string {
+  if (!isConditioning) return ex.target_reps.trim();
+  const obj = {
+    rounds: ex.cond_rounds.trim(),
+    work: ex.cond_work.trim(),
+    rest: ex.cond_rest.trim(),
+    distance: ex.cond_distance.trim(),
+    notes: ex.cond_notes.trim(),
+  };
+  return JSON.stringify(obj);
+}
+
+function decodeCondReps(target_reps: string | null, isConditioning: boolean): Partial<ExerciseRow> {
+  if (!isConditioning || !target_reps) return { target_reps: target_reps ?? "" };
+  try {
+    const obj = JSON.parse(target_reps) as Record<string, string>;
+    if (typeof obj === "object" && obj !== null && ("rounds" in obj || "work" in obj)) {
+      return { cond_rounds: obj.rounds ?? "", cond_work: obj.work ?? "", cond_rest: obj.rest ?? "", cond_distance: obj.distance ?? "", cond_notes: obj.notes ?? "", target_reps: "" };
+    }
+  } catch { /* not JSON, treat as plain reps */ }
+  return { target_reps: target_reps };
 }
 
 // Flatten blocks → flat exercise array for API
@@ -75,17 +124,17 @@ function blocksToExercises(blocks: Block[]) {
     coaching_notes: string | null;
     rest_seconds: number | null;
   }[] = [];
-  let sortOrder = 0;
   for (const block of blocks) {
+    const isConditioning = block.color === "conditioning";
+    const encodedLabel = encodeBlockLabel(block.label, block.group_type);
     for (let gi = 0; gi < block.exercises.length; gi++) {
       const ex = block.exercises[gi];
       if (!ex.name.trim()) continue;
-      sortOrder++;
       rows.push({
         name: ex.name.trim(),
-        target_sets: typeof ex.target_sets === "number" && Number.isFinite(ex.target_sets) ? ex.target_sets : null,
-        target_reps: ex.target_reps.trim(),
-        block_label: block.label,
+        target_sets: isConditioning ? null : (typeof ex.target_sets === "number" && Number.isFinite(ex.target_sets) ? ex.target_sets : null),
+        target_reps: encodeCondReps(ex, isConditioning),
+        block_label: encodedLabel,
         block_color: block.color,
         group_index: gi,
         coaching_notes: ex.coaching_notes.trim() || null,
@@ -101,19 +150,27 @@ function exercisesToBlocks(exercises: TemplateExercise[]): Block[] {
   const blockMap = new Map<string, Block>();
   const order: string[] = [];
   for (const ex of exercises) {
-    const label = ex.block_label ?? "Block A";
+    const rawLabel = ex.block_label ?? "Block A";
+    const { label, group_type } = decodeBlockLabel(rawLabel);
     const color = (ex.block_color as BlockColor | undefined) ?? "a";
-    const key = label;
+    const isConditioning = color === "conditioning";
+    const key = rawLabel;
     if (!blockMap.has(key)) {
-      blockMap.set(key, { _key: newKey(), label, color, rest_seconds: ex.rest_seconds ?? null, exercises: [] });
+      blockMap.set(key, { _key: newKey(), label, color, rest_seconds: ex.rest_seconds ?? null, group_type, exercises: [] });
       order.push(key);
     }
     const block = blockMap.get(key)!;
+    const condFields = decodeCondReps(ex.target_reps, isConditioning);
     block.exercises.push({
       _key: newKey(),
       name: ex.name,
       target_sets: ex.target_sets,
-      target_reps: ex.target_reps ?? "",
+      target_reps: condFields.target_reps ?? ex.target_reps ?? "",
+      cond_rounds: condFields.cond_rounds ?? "",
+      cond_work: condFields.cond_work ?? "",
+      cond_rest: condFields.cond_rest ?? "",
+      cond_distance: condFields.cond_distance ?? "",
+      cond_notes: condFields.cond_notes ?? "",
       coaching_notes: ex.coaching_notes ?? "",
     });
   }
@@ -167,6 +224,26 @@ function toISODateInputValue(isoYYYYMMDD: string) {
 }
 
 // ─── BlockBuilder: shared component for create + edit ─────────────────────
+const GROUP_TYPE_OPTIONS: { value: GroupType; label: string }[] = [
+  { value: "standard",  label: "Standard" },
+  { value: "superset",  label: "Superset" },
+  { value: "triset",    label: "Tri-set" },
+];
+
+function restMinsToSeconds(mins: string): number | null {
+  const v = mins.trim();
+  if (v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 60);
+}
+
+function restSecondsToMins(seconds: number | null): string {
+  if (seconds === null || seconds <= 0) return "";
+  const mins = seconds / 60;
+  return Number.isInteger(mins) ? String(mins) : String(Math.round(mins * 10) / 10);
+}
+
 function BlockBuilder({
   blocks,
   setBlocks,
@@ -226,6 +303,9 @@ function BlockBuilder({
     <div className="space-y-4">
       {blocks.map((block, bi) => {
         const col = BLOCK_COLORS[block.color] ?? BLOCK_COLORS.a;
+        const isConditioning = block.color === "conditioning";
+        const exLabel = isConditioning ? "Entry" : "Exercise";
+        const gtLabel = block.group_type === "superset" ? "Superset" : block.group_type === "triset" ? "Tri-set" : null;
         return (
           <div key={block._key} className={`rounded-2xl border-2 ${col.border} ${col.bg} overflow-hidden`}>
             {/* Block header */}
@@ -262,6 +342,43 @@ function BlockBuilder({
               </button>
             </div>
 
+            {/* Block settings row */}
+            <div className={`flex items-center gap-3 px-4 py-2 border-b ${col.border} flex-wrap`}>
+              {/* Group type — only for non-conditioning */}
+              {!isConditioning && (
+                <div className="flex items-center gap-1.5">
+                  {GROUP_TYPE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => updateBlock(block._key, { group_type: opt.value })}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                        block.group_type === opt.value
+                          ? `${col.dot.replace("bg-", "bg-")} bg-black/10 border-current/30 ${col.text}`
+                          : "border-transparent text-muted-foreground hover:bg-black/5"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Rest between sets */}
+              <div className="flex items-center gap-1.5 ml-auto">
+                <label className={`text-xs ${col.text} opacity-70 shrink-0`}>Rest between sets:</label>
+                <input
+                  value={restSecondsToMins(block.rest_seconds)}
+                  onChange={(e) => updateBlock(block._key, { rest_seconds: restMinsToSeconds(e.target.value) })}
+                  placeholder="mins"
+                  inputMode="decimal"
+                  disabled={disabled}
+                  className="w-16 px-2 py-1 rounded-lg border border-border bg-background text-foreground text-xs outline-none text-center"
+                />
+                <span className={`text-xs ${col.text} opacity-70`}>mins</span>
+              </div>
+            </div>
+
             {/* Exercises inside block */}
             <div className="px-4 py-3 space-y-3">
               {block.exercises.map((ex, ei) => (
@@ -269,7 +386,11 @@ function BlockBuilder({
                   <div className="flex items-center gap-2 mb-2">
                     <GripVertical className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs font-semibold text-muted-foreground flex-1">
-                      {block.exercises.length > 1 ? `Exercise ${ei + 1} of ${block.exercises.length}` : "Exercise"}
+                      {gtLabel && block.exercises.length > 1
+                        ? `${gtLabel} — ${exLabel} ${ei + 1}`
+                        : block.exercises.length > 1
+                        ? `${exLabel} ${ei + 1} of ${block.exercises.length}`
+                        : exLabel}
                     </span>
                     <button type="button" onClick={() => moveExercise(block._key, ex._key, -1)} disabled={disabled || ei === 0}
                       className="p-0.5 rounded hover:bg-black/10 disabled:opacity-30">
@@ -289,30 +410,76 @@ function BlockBuilder({
                     value={ex.name}
                     onChange={(name) => updateExercise(block._key, ex._key, { name })}
                     disabled={disabled}
-                    placeholder="Search exercises…"
+                    placeholder={isConditioning ? "e.g. Assault Bike, Run 400m…" : "Search exercises…"}
                   />
 
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <input
-                      value={typeof ex.target_sets === "number" ? String(ex.target_sets) : ""}
-                      onChange={(e) => {
-                        const v = e.target.value.trim();
-                        const n = v === "" ? null : Number(v);
-                        updateExercise(block._key, ex._key, { target_sets: Number.isFinite(n as number) ? (n as number) : null });
-                      }}
-                      placeholder="Sets (e.g. 3)"
-                      inputMode="numeric"
-                      disabled={disabled}
-                      className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
-                    />
-                    <input
-                      value={ex.target_reps}
-                      onChange={(e) => updateExercise(block._key, ex._key, { target_reps: e.target.value })}
-                      placeholder='Reps (e.g. "6" or "8-10")'
-                      disabled={disabled}
-                      className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
-                    />
-                  </div>
+                  {isConditioning ? (
+                    /* ── Conditioning fields ── */
+                    <div className="mt-2 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          value={ex.cond_rounds}
+                          onChange={(e) => updateExercise(block._key, ex._key, { cond_rounds: e.target.value })}
+                          placeholder="Rounds / intervals"
+                          disabled={disabled}
+                          className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                        />
+                        <input
+                          value={ex.cond_distance}
+                          onChange={(e) => updateExercise(block._key, ex._key, { cond_distance: e.target.value })}
+                          placeholder="Distance (e.g. 400m)"
+                          disabled={disabled}
+                          className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          value={ex.cond_work}
+                          onChange={(e) => updateExercise(block._key, ex._key, { cond_work: e.target.value })}
+                          placeholder="Work (e.g. 30s, max watts)"
+                          disabled={disabled}
+                          className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                        />
+                        <input
+                          value={ex.cond_rest}
+                          onChange={(e) => updateExercise(block._key, ex._key, { cond_rest: e.target.value })}
+                          placeholder="Rest (e.g. 30s)"
+                          disabled={disabled}
+                          className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                        />
+                      </div>
+                      <input
+                        value={ex.cond_notes}
+                        onChange={(e) => updateExercise(block._key, ex._key, { cond_notes: e.target.value })}
+                        placeholder="Intensity / notes (e.g. max watts, 85% effort)"
+                        disabled={disabled}
+                        className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                      />
+                    </div>
+                  ) : (
+                    /* ── Strength fields ── */
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <input
+                        value={typeof ex.target_sets === "number" ? String(ex.target_sets) : ""}
+                        onChange={(e) => {
+                          const v = e.target.value.trim();
+                          const n = v === "" ? null : Number(v);
+                          updateExercise(block._key, ex._key, { target_sets: Number.isFinite(n as number) ? (n as number) : null });
+                        }}
+                        placeholder="Sets (e.g. 3)"
+                        inputMode="numeric"
+                        disabled={disabled}
+                        className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                      />
+                      <input
+                        value={ex.target_reps}
+                        onChange={(e) => updateExercise(block._key, ex._key, { target_reps: e.target.value })}
+                        placeholder='Reps (e.g. "6" or "8-10")'
+                        disabled={disabled}
+                        className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                      />
+                    </div>
+                  )}
 
                   <div className="mt-2 relative">
                     <Info className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
@@ -327,34 +494,10 @@ function BlockBuilder({
                 </div>
               ))}
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <SecondaryButton type="button" onClick={() => addExercise(block._key)} disabled={disabled}>
-                  <Plus className="w-3.5 h-3.5" />
-                  Add exercise
-                </SecondaryButton>
-                {block.exercises.length === 1 && (
-                  <SecondaryButton type="button" onClick={() => addExercise(block._key)} disabled={disabled}>
-                    + Superset
-                  </SecondaryButton>
-                )}
-              </div>
-
-              {/* Rest time for block */}
-              <div className="flex items-center gap-2 pt-1">
-                <label className="text-xs text-muted-foreground shrink-0">Rest (sec):</label>
-                <input
-                  value={block.rest_seconds !== null ? String(block.rest_seconds) : ""}
-                  onChange={(e) => {
-                    const v = e.target.value.trim();
-                    const n = v === "" ? null : Math.floor(Number(v));
-                    updateBlock(block._key, { rest_seconds: Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null });
-                  }}
-                  placeholder="e.g. 180"
-                  inputMode="numeric"
-                  disabled={disabled}
-                  className="w-24 px-3 py-1.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
-                />
-              </div>
+              <SecondaryButton type="button" onClick={() => addExercise(block._key)} disabled={disabled}>
+                <Plus className="w-3.5 h-3.5" />
+                Add {exLabel.toLowerCase()}
+              </SecondaryButton>
             </div>
           </div>
         );
@@ -720,19 +863,25 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                     <div className="mt-3 space-y-2">
                       {exercisesToBlocks(t.exercises).map((block) => {
                         const col = BLOCK_COLORS[block.color] ?? BLOCK_COLORS.a;
+                        const isConditioning = block.color === "conditioning";
+                        const gtLabel = block.group_type === "superset" ? "Superset" : block.group_type === "triset" ? "Tri-set" : null;
+                        const restMins = restSecondsToMins(block.rest_seconds);
                         return (
                           <div key={block._key} className={`rounded-xl border ${col.border} ${col.bg} px-3 py-2`}>
                             <div className="flex items-center gap-1.5 mb-1">
                               <div className={`w-2 h-2 rounded-full ${col.dot}`} />
                               <p className={`text-xs font-bold ${col.text}`}>{block.label}</p>
-                              {block.rest_seconds && (
-                                <p className="text-xs text-muted-foreground ml-auto">Rest {block.rest_seconds}s</p>
+                              {gtLabel && <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-md bg-black/10 ${col.text} ml-1`}>{gtLabel}</span>}
+                              {restMins && (
+                                <p className="text-xs text-muted-foreground ml-auto">Rest {restMins} mins</p>
                               )}
                             </div>
                             {block.exercises.map((ex, ei) => (
                               <p key={ex._key} className="text-xs text-muted-foreground pl-3.5">
                                 {block.exercises.length > 1 ? `${ei + 1}. ` : ""}{ex.name}
-                                {(ex.target_sets || ex.target_reps) ? ` — ${ex.target_sets ?? "—"}×${ex.target_reps || "—"}` : ""}
+                                {isConditioning
+                                  ? (ex.cond_rounds ? ` — ${ex.cond_rounds}` : "") + (ex.cond_work ? ` ${ex.cond_work}` : "") + (ex.cond_distance ? ` ${ex.cond_distance}` : "")
+                                  : (ex.target_sets || ex.target_reps) ? ` — ${ex.target_sets ?? "—"}×${ex.target_reps || "—"}` : ""}
                               </p>
                             ))}
                           </div>

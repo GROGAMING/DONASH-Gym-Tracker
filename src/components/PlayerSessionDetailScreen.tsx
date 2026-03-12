@@ -37,24 +37,53 @@ const BLOCK_COLORS: Record<BlockColor, { bg: string; border: string; text: strin
   extra:        { bg: "bg-pink-50 dark:bg-pink-950",     border: "border-pink-300 dark:border-pink-700",   text: "text-pink-800 dark:text-pink-300",   dot: "bg-pink-500" },
 };
 
+type GroupType = "standard" | "superset" | "triset";
+
 type ExerciseBlock = {
   label: string;
   color: BlockColor;
   rest_seconds: number | null;
+  group_type: GroupType;
   exercises: ApiExercise[];
 };
+
+function decodeBlockLabel(encoded: string): { label: string; group_type: GroupType } {
+  const sep = encoded.indexOf("||");
+  if (sep === -1) return { label: encoded, group_type: "standard" };
+  const gt = encoded.slice(sep + 2) as GroupType;
+  const validGt: GroupType[] = ["standard", "superset", "triset"];
+  return { label: encoded.slice(0, sep), group_type: validGt.includes(gt) ? gt : "standard" };
+}
+
+function restSecondsToMinsLabel(seconds: number | null): string | null {
+  if (!seconds || seconds <= 0) return null;
+  const mins = seconds / 60;
+  const rounded = Math.round(mins * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded} mins` : `${rounded} mins`;
+}
+
+function parseCondReps(target_reps: string | null): Record<string, string> | null {
+  if (!target_reps) return null;
+  try {
+    const obj = JSON.parse(target_reps) as Record<string, string>;
+    if (typeof obj === "object" && obj !== null && ("rounds" in obj || "work" in obj)) return obj;
+  } catch { /* not JSON */ }
+  return null;
+}
 
 function groupExercisesIntoBlocks(exercises: ApiExercise[]): ExerciseBlock[] {
   const blockMap = new Map<string, ExerciseBlock>();
   const order: string[] = [];
   for (const ex of exercises) {
-    const label = ex.block_label ?? "";
-    const key = label || "__ungrouped__";
+    const rawLabel = ex.block_label ?? "";
+    const key = rawLabel || "__ungrouped__";
     if (!blockMap.has(key)) {
+      const { label, group_type } = decodeBlockLabel(rawLabel);
       blockMap.set(key, {
         label,
         color: (ex.block_color as BlockColor | undefined) ?? "a",
         rest_seconds: ex.rest_seconds ?? null,
+        group_type,
         exercises: [],
       });
       order.push(key);
@@ -411,8 +440,14 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
                       <div className={`flex items-center gap-2 px-4 py-2.5 ${col.bg} border-b ${col.border}`}>
                         <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${col.dot}`} />
                         <p className={`text-sm font-bold flex-1 ${col.text}`}>{block.label}</p>
-                        {block.rest_seconds && (
-                          <p className={`text-xs font-medium ${col.text} opacity-70`}>Rest {block.rest_seconds}s</p>
+                        {block.group_type === "superset" && (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg bg-black/10 ${col.text}`}>Superset</span>
+                        )}
+                        {block.group_type === "triset" && (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg bg-black/10 ${col.text}`}>Tri-set</span>
+                        )}
+                        {restSecondsToMinsLabel(block.rest_seconds) && (
+                          <p className={`text-xs font-medium ${col.text} opacity-70`}>Rest between sets: {restSecondsToMinsLabel(block.rest_seconds)}</p>
                         )}
                       </div>
                     ) : null}
@@ -425,6 +460,9 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
                         const last = lastTime?.last?.[ex.id] ?? [];
                         const summary = buildSummary(rows);
 
+                        const isConditioning = block.color === "conditioning";
+                        const condFields = isConditioning ? parseCondReps(ex.target_reps) : null;
+
                         return (
                           <div key={ex.id} className="bg-card">
                             {/* Exercise header */}
@@ -432,7 +470,16 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
                               <div className="min-w-0">
                                 <p className="text-sm font-semibold text-foreground truncate">{ex.name}</p>
                                 {isCollapsed ? (
-                                  <p className="text-xs text-muted-foreground mt-0.5">{summary}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">{isConditioning ? "Conditioning" : summary}</p>
+                                ) : isConditioning ? (
+                                  <div className="mt-1 space-y-0.5">
+                                    {condFields?.rounds && <p className="text-xs text-muted-foreground">{condFields.rounds} rounds</p>}
+                                    {condFields?.distance && <p className="text-xs text-muted-foreground">{condFields.distance}</p>}
+                                    {condFields?.work && <p className="text-xs text-muted-foreground">Work: {condFields.work}</p>}
+                                    {condFields?.rest && <p className="text-xs text-muted-foreground">Rest: {condFields.rest}</p>}
+                                    {condFields?.notes && <p className="text-xs text-muted-foreground italic">{condFields.notes}</p>}
+                                    {!condFields && ex.target_reps && <p className="text-xs text-muted-foreground">{ex.target_reps}</p>}
+                                  </div>
                                 ) : (
                                   <p className="text-xs text-muted-foreground mt-0.5">
                                     Target: {typeof ex.target_sets === "number" ? ex.target_sets : "—"} × {ex.target_reps || "—"}
@@ -466,8 +513,8 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
                               </div>
                             )}
 
-                            {/* Collapsible body */}
-                            {!isCollapsed && (
+                            {/* Collapsible body — hide set logging for conditioning */}
+                            {!isCollapsed && !isConditioning && (
                               <div className="px-5 pb-5">
                                 {last.length > 0 && (
                                   <p className="text-xs text-muted-foreground mb-3">
@@ -508,6 +555,11 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
                                     <SecondaryButton type="button" onClick={() => addSet(ex.id)}>+ Add set</SecondaryButton>
                                   </div>
                                 </div>
+                              </div>
+                            )}
+                            {!isCollapsed && isConditioning && (
+                              <div className="px-5 pb-5">
+                                <p className="text-xs text-muted-foreground">Conditioning — no set logging required.</p>
                               </div>
                             )}
                           </div>
