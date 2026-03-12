@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardList, GripVertical, Info, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
@@ -10,13 +10,136 @@ import ExerciseCombobox from "@/components/ExerciseCombobox";
 import PageContainer from "@/components/PageContainer";
 import ToastBanner from "@/components/ToastBanner";
 import { PrimaryButton, SecondaryButton } from "@/components/GymButtons";
+import { mondayWeekStartISO, mondayFromAnyDateISO } from "@/lib/week";
 
 type ToastState = { message: string; type: "success" | "error" };
+
+// ─── Block colour tokens ───────────────────────────────────────────────────
+export type BlockColor = "warmup" | "a" | "b" | "c" | "conditioning" | "extra";
+
+const BLOCK_PRESETS: { color: BlockColor; label: string }[] = [
+  { color: "warmup",       label: "Warm Up / Mobility" },
+  { color: "a",            label: "Block A" },
+  { color: "b",            label: "Block B" },
+  { color: "c",            label: "Block C" },
+  { color: "conditioning", label: "Conditioning" },
+  { color: "extra",        label: "Extra Block" },
+];
+
+const BLOCK_COLORS: Record<BlockColor, { bg: string; border: string; text: string; dot: string }> = {
+  warmup:       { bg: "bg-zinc-100 dark:bg-zinc-800",   border: "border-zinc-300 dark:border-zinc-600",  text: "text-zinc-700 dark:text-zinc-300",  dot: "bg-zinc-400" },
+  a:            { bg: "bg-emerald-50 dark:bg-emerald-950", border: "border-emerald-300 dark:border-emerald-700", text: "text-emerald-800 dark:text-emerald-300", dot: "bg-emerald-500" },
+  b:            { bg: "bg-blue-50 dark:bg-blue-950",    border: "border-blue-300 dark:border-blue-700",  text: "text-blue-800 dark:text-blue-300",  dot: "bg-blue-500" },
+  c:            { bg: "bg-purple-50 dark:bg-purple-950",border: "border-purple-300 dark:border-purple-700",text: "text-purple-800 dark:text-purple-300",dot: "bg-purple-500" },
+  conditioning: { bg: "bg-orange-50 dark:bg-orange-950",border: "border-orange-300 dark:border-orange-700",text: "text-orange-800 dark:text-orange-300",dot: "bg-orange-500" },
+  extra:        { bg: "bg-pink-50 dark:bg-pink-950",    border: "border-pink-300 dark:border-pink-700",  text: "text-pink-800 dark:text-pink-300",  dot: "bg-pink-500" },
+};
+
+// ─── Exercise row (within a block) ────────────────────────────────────────
+type ExerciseRow = {
+  _key: string;
+  name: string;
+  target_sets: number | null;
+  target_reps: string;
+  coaching_notes: string;
+};
+
+// ─── Block (container of exercises) ───────────────────────────────────────
+type Block = {
+  _key: string;
+  label: string;
+  color: BlockColor;
+  rest_seconds: number | null;
+  exercises: ExerciseRow[];
+};
+
+function newKey() { return `${Date.now()}-${Math.random()}`; }
+
+function newExerciseRow(): ExerciseRow {
+  return { _key: newKey(), name: "", target_sets: null, target_reps: "", coaching_notes: "" };
+}
+
+function newBlock(preset: { color: BlockColor; label: string }): Block {
+  return { _key: newKey(), label: preset.label, color: preset.color, rest_seconds: null, exercises: [newExerciseRow()] };
+}
+
+// Flatten blocks → flat exercise array for API
+function blocksToExercises(blocks: Block[]) {
+  const rows: {
+    name: string;
+    target_sets: number | null;
+    target_reps: string;
+    block_label: string;
+    block_color: string;
+    group_index: number;
+    coaching_notes: string | null;
+    rest_seconds: number | null;
+  }[] = [];
+  let sortOrder = 0;
+  for (const block of blocks) {
+    for (let gi = 0; gi < block.exercises.length; gi++) {
+      const ex = block.exercises[gi];
+      if (!ex.name.trim()) continue;
+      sortOrder++;
+      rows.push({
+        name: ex.name.trim(),
+        target_sets: typeof ex.target_sets === "number" && Number.isFinite(ex.target_sets) ? ex.target_sets : null,
+        target_reps: ex.target_reps.trim(),
+        block_label: block.label,
+        block_color: block.color,
+        group_index: gi,
+        coaching_notes: ex.coaching_notes.trim() || null,
+        rest_seconds: block.rest_seconds,
+      });
+    }
+  }
+  return rows;
+}
+
+// Reconstruct blocks from flat exercise array (from API)
+function exercisesToBlocks(exercises: TemplateExercise[]): Block[] {
+  const blockMap = new Map<string, Block>();
+  const order: string[] = [];
+  for (const ex of exercises) {
+    const label = ex.block_label ?? "Block A";
+    const color = (ex.block_color as BlockColor | undefined) ?? "a";
+    const key = label;
+    if (!blockMap.has(key)) {
+      blockMap.set(key, { _key: newKey(), label, color, rest_seconds: ex.rest_seconds ?? null, exercises: [] });
+      order.push(key);
+    }
+    const block = blockMap.get(key)!;
+    block.exercises.push({
+      _key: newKey(),
+      name: ex.name,
+      target_sets: ex.target_sets,
+      target_reps: ex.target_reps ?? "",
+      coaching_notes: ex.coaching_notes ?? "",
+    });
+  }
+  if (order.length === 0) {
+    return [newBlock(BLOCK_PRESETS[1])];
+  }
+  return order.map((k) => blockMap.get(k)!);
+}
+
+type TemplateExercise = {
+  id: string;
+  name: string;
+  sort_order: number;
+  target_sets: number | null;
+  target_reps: string | null;
+  block_label: string | null;
+  block_color: string | null;
+  group_index: number;
+  coaching_notes: string | null;
+  rest_seconds: number | null;
+};
 
 type Template = {
   id: string;
   title: string;
-  exercises: { id: string; name: string; sort_order: number; target_sets: number | null; target_reps: string | null }[];
+  exercises: TemplateExercise[];
   created_at: string;
 };
 
@@ -29,14 +152,233 @@ type AssignmentItem = {
   template: null | {
     id: string;
     title: string;
-    exercises: { id: string; name: string; sort_order: number; target_sets: number | null; target_reps: string | null }[];
+    exercises: TemplateExercise[];
   };
 };
 
 type AssignmentResponse = {
+  weekStart: string;
   assignments: AssignmentItem[];
 };
 
+function toISODateInputValue(isoYYYYMMDD: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoYYYYMMDD)) return isoYYYYMMDD;
+  return mondayWeekStartISO(new Date());
+}
+
+// ─── BlockBuilder: shared component for create + edit ─────────────────────
+function BlockBuilder({
+  blocks,
+  setBlocks,
+  disabled,
+}: {
+  blocks: Block[];
+  setBlocks: React.Dispatch<React.SetStateAction<Block[]>>;
+  disabled: boolean;
+}) {
+  const updateBlock = (bKey: string, patch: Partial<Block>) =>
+    setBlocks((prev: Block[]) => prev.map((b: Block) => b._key === bKey ? { ...b, ...patch } : b));
+
+  const removeBlock = (bKey: string) =>
+    setBlocks((prev: Block[]) => prev.filter((b: Block) => b._key !== bKey));
+
+  const moveBlock = (bKey: string, dir: -1 | 1) =>
+    setBlocks((prev: Block[]) => {
+      const idx = prev.findIndex((b: Block) => b._key === bKey);
+      if (idx < 0) return prev;
+      const next = [...prev];
+      const swapIdx = idx + dir;
+      if (swapIdx < 0 || swapIdx >= next.length) return prev;
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      return next;
+    });
+
+  const updateExercise = (bKey: string, eKey: string, patch: Partial<ExerciseRow>) =>
+    setBlocks((prev: Block[]) => prev.map((b: Block) =>
+      b._key === bKey
+        ? { ...b, exercises: b.exercises.map((e: ExerciseRow) => e._key === eKey ? { ...e, ...patch } : e) }
+        : b,
+    ));
+
+  const addExercise = (bKey: string) =>
+    setBlocks((prev: Block[]) => prev.map((b: Block) =>
+      b._key === bKey ? { ...b, exercises: [...b.exercises, newExerciseRow()] } : b,
+    ));
+
+  const removeExercise = (bKey: string, eKey: string) =>
+    setBlocks((prev: Block[]) => prev.map((b: Block) =>
+      b._key === bKey ? { ...b, exercises: b.exercises.filter((e: ExerciseRow) => e._key !== eKey) } : b,
+    ));
+
+  const moveExercise = (bKey: string, eKey: string, dir: -1 | 1) =>
+    setBlocks((prev: Block[]) => prev.map((b: Block) => {
+      if (b._key !== bKey) return b;
+      const idx = b.exercises.findIndex((e: ExerciseRow) => e._key === eKey);
+      if (idx < 0) return b;
+      const next = [...b.exercises];
+      const swapIdx = idx + dir;
+      if (swapIdx < 0 || swapIdx >= next.length) return b;
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      return { ...b, exercises: next };
+    }));
+
+  return (
+    <div className="space-y-4">
+      {blocks.map((block, bi) => {
+        const col = BLOCK_COLORS[block.color] ?? BLOCK_COLORS.a;
+        return (
+          <div key={block._key} className={`rounded-2xl border-2 ${col.border} ${col.bg} overflow-hidden`}>
+            {/* Block header */}
+            <div className={`flex items-center gap-2 px-4 py-3 border-b ${col.border}`}>
+              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${col.dot}`} />
+              <input
+                value={block.label}
+                onChange={(e) => updateBlock(block._key, { label: e.target.value })}
+                disabled={disabled}
+                className={`flex-1 text-sm font-bold bg-transparent outline-none ${col.text} placeholder:text-current placeholder:opacity-40`}
+                placeholder="Block name…"
+              />
+              <select
+                value={block.color}
+                onChange={(e) => updateBlock(block._key, { color: e.target.value as BlockColor })}
+                disabled={disabled}
+                className={`text-xs bg-transparent border border-current/20 rounded-lg px-2 py-1 outline-none ${col.text}`}
+              >
+                {BLOCK_PRESETS.map((p) => (
+                  <option key={p.color} value={p.color}>{p.label}</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => moveBlock(block._key, -1)} disabled={disabled || bi === 0}
+                className="shrink-0 p-1 rounded-lg hover:bg-black/10 disabled:opacity-30 transition-colors">
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+              <button type="button" onClick={() => moveBlock(block._key, 1)} disabled={disabled || bi === blocks.length - 1}
+                className="shrink-0 p-1 rounded-lg hover:bg-black/10 disabled:opacity-30 transition-colors">
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              <button type="button" onClick={() => removeBlock(block._key)} disabled={disabled || blocks.length <= 1}
+                className="shrink-0 p-1 rounded-lg hover:bg-black/10 disabled:opacity-30 transition-colors text-red-500">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Exercises inside block */}
+            <div className="px-4 py-3 space-y-3">
+              {block.exercises.map((ex, ei) => (
+                <div key={ex._key} className="bg-white/60 dark:bg-black/20 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <GripVertical className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-semibold text-muted-foreground flex-1">
+                      {block.exercises.length > 1 ? `Exercise ${ei + 1} of ${block.exercises.length}` : "Exercise"}
+                    </span>
+                    <button type="button" onClick={() => moveExercise(block._key, ex._key, -1)} disabled={disabled || ei === 0}
+                      className="p-0.5 rounded hover:bg-black/10 disabled:opacity-30">
+                      <ChevronUp className="w-3 h-3" />
+                    </button>
+                    <button type="button" onClick={() => moveExercise(block._key, ex._key, 1)} disabled={disabled || ei === block.exercises.length - 1}
+                      className="p-0.5 rounded hover:bg-black/10 disabled:opacity-30">
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    <button type="button" onClick={() => removeExercise(block._key, ex._key)} disabled={disabled || block.exercises.length <= 1}
+                      className="p-0.5 rounded hover:bg-black/10 disabled:opacity-30 text-red-500">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <ExerciseCombobox
+                    value={ex.name}
+                    onChange={(name) => updateExercise(block._key, ex._key, { name })}
+                    disabled={disabled}
+                    placeholder="Search exercises…"
+                  />
+
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <input
+                      value={typeof ex.target_sets === "number" ? String(ex.target_sets) : ""}
+                      onChange={(e) => {
+                        const v = e.target.value.trim();
+                        const n = v === "" ? null : Number(v);
+                        updateExercise(block._key, ex._key, { target_sets: Number.isFinite(n as number) ? (n as number) : null });
+                      }}
+                      placeholder="Sets (e.g. 3)"
+                      inputMode="numeric"
+                      disabled={disabled}
+                      className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                    />
+                    <input
+                      value={ex.target_reps}
+                      onChange={(e) => updateExercise(block._key, ex._key, { target_reps: e.target.value })}
+                      placeholder='Reps (e.g. "6" or "8-10")'
+                      disabled={disabled}
+                      className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                    />
+                  </div>
+
+                  <div className="mt-2 relative">
+                    <Info className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                    <input
+                      value={ex.coaching_notes}
+                      onChange={(e) => updateExercise(block._key, ex._key, { coaching_notes: e.target.value })}
+                      placeholder="Coaching note (optional)…"
+                      disabled={disabled}
+                      className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                    />
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <SecondaryButton type="button" onClick={() => addExercise(block._key)} disabled={disabled}>
+                  <Plus className="w-3.5 h-3.5" />
+                  Add exercise
+                </SecondaryButton>
+                {block.exercises.length === 1 && (
+                  <SecondaryButton type="button" onClick={() => addExercise(block._key)} disabled={disabled}>
+                    + Superset
+                  </SecondaryButton>
+                )}
+              </div>
+
+              {/* Rest time for block */}
+              <div className="flex items-center gap-2 pt-1">
+                <label className="text-xs text-muted-foreground shrink-0">Rest (sec):</label>
+                <input
+                  value={block.rest_seconds !== null ? String(block.rest_seconds) : ""}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    const n = v === "" ? null : Math.floor(Number(v));
+                    updateBlock(block._key, { rest_seconds: Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null });
+                  }}
+                  placeholder="e.g. 180"
+                  inputMode="numeric"
+                  disabled={disabled}
+                  className="w-24 px-3 py-1.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Add block buttons */}
+      <div className="flex flex-wrap gap-2">
+        {BLOCK_PRESETS.map((p) => (
+          <SecondaryButton
+            key={p.color}
+            type="button"
+            disabled={disabled}
+            onClick={() => setBlocks((prev: Block[]) => [...prev, newBlock(p)])}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {p.label}
+          </SecondaryButton>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
 export default function AdminSessionsScreen({ teamName }: { teamName: string }) {
   const router = useRouter();
 
@@ -46,54 +388,32 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
 
+  // ── Create form state ──
   const [newTitle, setNewTitle] = useState("");
-  const [newExercises, setNewExercises] = useState<{ name: string; target_sets: number | null; target_reps: string }[]>([
-    { name: "", target_sets: null, target_reps: "" },
-  ]);
+  const [newBlocks, setNewBlocks] = useState<Block[]>([newBlock(BLOCK_PRESETS[1])]);
   const [creating, setCreating] = useState(false);
 
+  // ── Edit form state ──
+  const [editTarget, setEditTarget] = useState<Template | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBlocks, setEditBlocks] = useState<Block[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  // ── Weekly assignment state ──
+  const [weekStartInput, setWeekStartInput] = useState(() => mondayWeekStartISO(new Date()));
+  const normalizedWeekStart = useMemo(() => mondayFromAnyDateISO(weekStartInput), [weekStartInput]);
   const [assignment, setAssignment] = useState<AssignmentResponse | null>(null);
   const [loadingAssignment, setLoadingAssignment] = useState(true);
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
-
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [assigning, setAssigning] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [savingNotesId, setSavingNotesId] = useState<string | null>(null);
+  const [notesMap, setNotesMap] = useState<Record<string, string>>({});
 
+  // ── Delete ──
   const [deleteTarget, setDeleteTarget] = useState<Template | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  const [editTarget, setEditTarget] = useState<Template | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editExercises, setEditExercises] = useState<{ name: string; target_sets: number | null; target_reps: string }[]>([]);
-  const [saving, setSaving] = useState(false);
-
-  const startEdit = useCallback((t: Template) => {
-    setEditTarget(t);
-    setEditTitle(t.title);
-    setEditExercises(
-      t.exercises.length > 0
-        ? t.exercises.map((ex) => ({
-            name: ex.name,
-            target_sets: ex.target_sets,
-            target_reps: ex.target_reps ?? "",
-          }))
-        : [{ name: "", target_sets: null, target_reps: "" }],
-    );
-  }, []);
-
-  const cancelEdit = useCallback(() => {
-    setEditTarget(null);
-    setEditTitle("");
-    setEditExercises([]);
-  }, []);
-
-  const addEditExerciseRow = useCallback(() => {
-    setEditExercises((prev) => [...prev, { name: "", target_sets: null, target_reps: "" }]);
-  }, []);
-
-  const removeEditExerciseRow = useCallback((idx: number) => {
-    setEditExercises((prev) => prev.filter((_, i) => i !== idx));
-  }, []);
 
   const fetchTemplates = useCallback(async () => {
     setLoadingTemplates(true);
@@ -116,27 +436,81 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     }
   }, []);
 
+  const fetchAssignment = useCallback(async (weekStart: string) => {
+    setLoadingAssignment(true);
+    setAssignmentError(null);
+    try {
+      const res = await fetch(`/api/admin/weekly-session?weekStart=${encodeURIComponent(weekStart)}`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setAssignmentError(body?.error || "Failed to load weekly assignment.");
+        setAssignment(null);
+        return;
+      }
+      const data = (await res.json()) as AssignmentResponse;
+      setAssignment(data);
+      const initial: Record<string, string> = {};
+      for (const a of data.assignments) initial[a.id] = a.notes ?? "";
+      setNotesMap(initial);
+    } catch {
+      setAssignmentError("Failed to load weekly assignment.");
+      setAssignment(null);
+    } finally {
+      setLoadingAssignment(false);
+    }
+  }, []);
+
+  useEffect(() => { void fetchTemplates(); }, [fetchTemplates]);
+  useEffect(() => { void fetchAssignment(normalizedWeekStart); }, [fetchAssignment, normalizedWeekStart]);
+
+  const startEdit = useCallback((t: Template) => {
+    setEditTarget(t);
+    setEditTitle(t.title);
+    setEditBlocks(exercisesToBlocks(t.exercises));
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditTarget(null);
+    setEditTitle("");
+    setEditBlocks([]);
+  }, []);
+
+  const createTemplate = useCallback(async () => {
+    if (creating) return;
+    const title = newTitle.trim();
+    const exercises = blocksToExercises(newBlocks);
+    if (!title) { setToast({ message: "Add a title.", type: "error" }); return; }
+    if (exercises.length === 0) { setToast({ message: "Add at least one exercise.", type: "error" }); return; }
+    setCreating(true);
+    setToast(null);
+    try {
+      const res = await fetch("/api/admin/session-templates", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title, exercises }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setToast({ message: body?.error || "Failed to create template.", type: "error" });
+        return;
+      }
+      setToast({ message: "Template created.", type: "success" });
+      setNewTitle("");
+      setNewBlocks([newBlock(BLOCK_PRESETS[1])]);
+      await fetchTemplates();
+    } catch {
+      setToast({ message: "Failed to create template.", type: "error" });
+    } finally {
+      setCreating(false);
+    }
+  }, [creating, fetchTemplates, newBlocks, newTitle]);
+
   const saveEdit = useCallback(async () => {
     if (!editTarget || saving) return;
-
     const title = editTitle.trim();
-    const exercises = editExercises
-      .map((x) => ({
-        name: x.name.trim(),
-        target_sets: typeof x.target_sets === "number" && Number.isFinite(x.target_sets) ? x.target_sets : null,
-        target_reps: x.target_reps.trim(),
-      }))
-      .filter((x) => x.name.length > 0);
-
-    if (!title) {
-      setToast({ message: "Add a title.", type: "error" });
-      return;
-    }
-    if (exercises.length === 0) {
-      setToast({ message: "Add at least one exercise.", type: "error" });
-      return;
-    }
-
+    const exercises = blocksToExercises(editBlocks);
+    if (!title) { setToast({ message: "Add a title.", type: "error" }); return; }
+    if (exercises.length === 0) { setToast({ message: "Add at least one exercise.", type: "error" }); return; }
     setSaving(true);
     setToast(null);
     try {
@@ -146,10 +520,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
         body: JSON.stringify({ title, exercises }),
       });
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        setToast({ message: body?.error || "Failed to save template.", type: "error" });
-        return;
-      }
+      if (!res.ok) { setToast({ message: body?.error || "Failed to save template.", type: "error" }); return; }
       setToast({ message: "Template updated.", type: "success" });
       cancelEdit();
       await fetchTemplates();
@@ -158,138 +529,42 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     } finally {
       setSaving(false);
     }
-  }, [cancelEdit, editExercises, editTarget, editTitle, fetchTemplates, saving]);
+  }, [cancelEdit, editBlocks, editTarget, editTitle, fetchTemplates, saving]);
 
-  const [removingId, setRemovingId] = useState<string | null>(null);
-  const [savingNotesId, setSavingNotesId] = useState<string | null>(null);
-  const [notesMap, setNotesMap] = useState<Record<string, string>>({});
-
-  const onBack = useCallback(() => {
-    router.push("/admin");
-  }, [router]);
-
-  const fetchAssignment = useCallback(async () => {
-    setLoadingAssignment(true);
-    setAssignmentError(null);
-    try {
-      const res = await fetch("/api/admin/weekly-session");
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setAssignmentError(body?.error || "Failed to load active sessions.");
-        setAssignment(null);
-        return;
-      }
-      const data = (await res.json()) as AssignmentResponse;
-      setAssignment(data);
-      const initial: Record<string, string> = {};
-      for (const a of data.assignments) {
-        initial[a.id] = a.notes ?? "";
-      }
-      setNotesMap(initial);
-    } catch {
-      setAssignmentError("Failed to load active sessions.");
-      setAssignment(null);
-    } finally {
-      setLoadingAssignment(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchTemplates();
-    void fetchAssignment();
-  }, [fetchTemplates, fetchAssignment]);
-
-  const addExerciseRow = useCallback(() => {
-    setNewExercises((prev) => [...prev, { name: "", target_sets: null, target_reps: "" }]);
-  }, []);
-
-  const removeExerciseRow = useCallback((idx: number) => {
-    setNewExercises((prev) => prev.filter((_, i) => i !== idx));
-  }, []);
-
-  const createTemplate = useCallback(async () => {
-    if (creating) return;
-
-    const title = newTitle.trim();
-    const exercises = newExercises
-      .map((x) => ({
-        name: x.name.trim(),
-        target_sets: typeof x.target_sets === "number" ? x.target_sets : null,
-        target_reps: x.target_reps.trim(),
-      }))
-      .filter((x) => x.name.length > 0)
-      .map((x) => ({
-        name: x.name,
-        target_sets: typeof x.target_sets === "number" && Number.isFinite(x.target_sets) ? x.target_sets : null,
-        target_reps: x.target_reps,
-      }));
-
-    if (!title) {
-      setToast({ message: "Add a title.", type: "error" });
-      return;
-    }
-
-    if (exercises.length === 0) {
-      setToast({ message: "Add at least one exercise.", type: "error" });
-      return;
-    }
-
-    setCreating(true);
+  const deleteTemplate = useCallback(async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
     setToast(null);
-
     try {
-      const res = await fetch("/api/admin/session-templates", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, exercises }),
-      });
-
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        if (process.env.NODE_ENV !== "production") {
-          // eslint-disable-next-line no-console
-          console.error("Create template failed", { status: res.status, body });
-        }
-        setToast({ message: body?.error || "Failed to create template.", type: "error" });
-        return;
-      }
-
-      setToast({ message: "Template created.", type: "success" });
-      setNewTitle("");
-      setNewExercises([{ name: "", target_sets: null, target_reps: "" }]);
+      const res = await fetch(`/api/admin/session-templates/${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) { setToast({ message: body?.error || "Failed to delete template.", type: "error" }); return; }
+      setToast({ message: "Template deleted.", type: "success" });
+      setDeleteTarget(null);
       await fetchTemplates();
-    } catch (err) {
-      if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
-        console.error("Create template exception", err);
-      }
-      setToast({ message: "Failed to create template.", type: "error" });
+    } catch {
+      setToast({ message: "Failed to delete template.", type: "error" });
     } finally {
-      setCreating(false);
+      setDeleting(false);
     }
-  }, [creating, fetchTemplates, newExercises, newTitle]);
+  }, [deleteTarget, deleting, fetchTemplates]);
 
   const removeAssignment = useCallback(async (assignmentId: string) => {
     if (removingId) return;
     setRemovingId(assignmentId);
     setToast(null);
     try {
-      const res = await fetch(`/api/admin/weekly-session/${encodeURIComponent(assignmentId)}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(`/api/admin/weekly-session/${encodeURIComponent(assignmentId)}`, { method: "DELETE" });
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        setToast({ message: body?.error || "Failed to remove session.", type: "error" });
-        return;
-      }
+      if (!res.ok) { setToast({ message: body?.error || "Failed to remove session.", type: "error" }); return; }
       setToast({ message: "Session removed.", type: "success" });
-      await fetchAssignment();
+      await fetchAssignment(normalizedWeekStart);
     } catch {
       setToast({ message: "Failed to remove session.", type: "error" });
     } finally {
       setRemovingId(null);
     }
-  }, [fetchAssignment, removingId]);
+  }, [fetchAssignment, normalizedWeekStart, removingId]);
 
   const saveNotes = useCallback(async (assignmentId: string) => {
     if (savingNotesId) return;
@@ -302,10 +577,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
         body: JSON.stringify({ notes: notesMap[assignmentId] ?? "" }),
       });
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        setToast({ message: body?.error || "Failed to save notes.", type: "error" });
-        return;
-      }
+      if (!res.ok) { setToast({ message: body?.error || "Failed to save notes.", type: "error" }); return; }
       setToast({ message: "Notes saved.", type: "success" });
     } catch {
       setToast({ message: "Failed to save notes.", type: "error" });
@@ -314,62 +586,30 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     }
   }, [notesMap, savingNotesId]);
 
-  const deleteTemplate = useCallback(async () => {
-    if (!deleteTarget || deleting) return;
-    setDeleting(true);
-    setToast(null);
-    try {
-      const res = await fetch(`/api/admin/session-templates/${encodeURIComponent(deleteTarget.id)}`, {
-        method: "DELETE",
-      });
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        setToast({ message: body?.error || "Failed to delete template.", type: "error" });
-        return;
-      }
-      setToast({ message: "Template deleted.", type: "success" });
-      setDeleteTarget(null);
-      await fetchTemplates();
-    } catch {
-      setToast({ message: "Failed to delete template.", type: "error" });
-    } finally {
-      setDeleting(false);
-    }
-  }, [deleteTarget, deleting, fetchTemplates]);
-
-  const assignSession = useCallback(async () => {
+  const assignWeekly = useCallback(async () => {
     if (assigning) return;
-
-    if (!selectedTemplateId) {
-      setToast({ message: "Pick a template first.", type: "error" });
-      return;
-    }
-
+    if (!selectedTemplateId) { setToast({ message: "Pick a template first.", type: "error" }); return; }
     setAssigning(true);
     setToast(null);
-
     try {
       const res = await fetch("/api/admin/weekly-session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ templateId: selectedTemplateId }),
+        body: JSON.stringify({ weekStart: normalizedWeekStart, templateId: selectedTemplateId }),
       });
-
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         setToast({ message: body?.error || "Failed to assign session.", type: "error" });
         return;
       }
-
-      setToast({ message: "Session assigned.", type: "success" });
-      setSelectedTemplateId("");
-      await fetchAssignment();
+      setToast({ message: "Weekly session assigned.", type: "success" });
+      await fetchAssignment(normalizedWeekStart);
     } catch {
       setToast({ message: "Failed to assign session.", type: "error" });
     } finally {
       setAssigning(false);
     }
-  }, [assigning, fetchAssignment, selectedTemplateId]);
+  }, [assigning, fetchAssignment, normalizedWeekStart, selectedTemplateId]);
 
   return (
     <AppShell teamName={teamName}>
@@ -377,7 +617,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
 
       <PageContainer className="pt-5 sm:pt-6 pb-8 animate-fade-up">
         <div className="mb-4">
-          <BackButton onClick={onBack} />
+          <BackButton onClick={() => router.push("/admin")} />
         </div>
 
         <div className="flex items-center gap-2.5 mb-5">
@@ -386,10 +626,11 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
           </div>
           <div>
             <h2 className="font-display font-extrabold text-xl text-foreground leading-tight">Sessions</h2>
-            <p className="text-xs text-muted-foreground">Create templates and assign persistent sessions</p>
+            <p className="text-xs text-muted-foreground">Build templates and assign this week's session</p>
           </div>
         </div>
 
+        {/* ── Create template ── */}
         <div className="bg-card border border-border rounded-2xl shadow-card p-5">
           <p className="text-xs font-semibold text-muted-foreground mb-3">Create template</p>
 
@@ -397,74 +638,12 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="e.g. Push Day"
-            className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+            placeholder="e.g. Lower Body Power"
+            className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none mb-4"
             disabled={creating}
           />
 
-          <div className="mt-4">
-            <label className="block text-xs font-semibold text-muted-foreground mb-2">Exercises</label>
-            <div className="mt-3 space-y-2">
-              {newExercises.map((ex, i) => (
-                <div key={`new-ex-${i}`} className="bg-secondary rounded-xl px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold text-muted-foreground">Exercise {i + 1}</p>
-                    <button
-                      type="button"
-                      onClick={() => removeExerciseRow(i)}
-                      className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                      disabled={creating || newExercises.length <= 1}
-                    >
-                      Remove
-                    </button>
-                  </div>
-
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div className="sm:col-span-2">
-                      <ExerciseCombobox
-                        value={ex.name}
-                        onChange={(name) =>
-                          setNewExercises((prev) => prev.map((row: typeof prev[number], idx: number) => (idx === i ? { ...row, name } : row)))
-                        }
-                        disabled={creating}
-                        placeholder="Search exercises…"
-                      />
-                    </div>
-                    <input
-                      value={typeof ex.target_sets === "number" ? String(ex.target_sets) : ""}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        const n = next.trim() === "" ? null : Number(next);
-                        setNewExercises((prev) =>
-                          prev.map((row, idx) => (idx === i ? { ...row, target_sets: Number.isFinite(n as number) ? (n as number) : null } : row)),
-                        );
-                      }}
-                      placeholder="Target sets"
-                      inputMode="numeric"
-                      className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-                      disabled={creating}
-                    />
-                    <input
-                      value={ex.target_reps}
-                      onChange={(e) =>
-                        setNewExercises((prev) => prev.map((row, idx) => (idx === i ? { ...row, target_reps: e.target.value } : row)))
-                      }
-                      placeholder='Target reps (e.g. "8-10")'
-                      className="sm:col-span-3 w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-                      disabled={creating}
-                    />
-                  </div>
-                </div>
-              ))}
-
-              <div>
-                <SecondaryButton type="button" onClick={addExerciseRow} disabled={creating}>
-                  <Plus className="w-4 h-4" />
-                  Add exercise
-                </SecondaryButton>
-              </div>
-            </div>
-          </div>
+          <BlockBuilder blocks={newBlocks} setBlocks={setNewBlocks} disabled={creating} />
 
           <div className="mt-5">
             <PrimaryButton type="button" onClick={() => void createTemplate()} disabled={creating} loading={creating}>
@@ -474,6 +653,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
           </div>
         </div>
 
+        {/* ── Templates list ── */}
         <div className="mt-6 bg-card border border-border rounded-2xl shadow-card p-5">
           <p className="text-xs font-semibold text-muted-foreground mb-3">Templates</p>
 
@@ -487,18 +667,13 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
             <div className="space-y-3">
               {templates.map((t) =>
                 editTarget?.id === t.id ? (
-                  // ── Inline edit form ──
+                  // ── Inline edit ──
                   <div key={t.id} className="border border-border rounded-2xl p-4 bg-background">
                     <div className="flex items-center justify-between gap-3 mb-3">
                       <p className="text-xs font-semibold text-muted-foreground">Editing template</p>
-                      <button
-                        type="button"
-                        onClick={cancelEdit}
-                        disabled={saving}
-                        className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        Cancel
+                      <button type="button" onClick={cancelEdit} disabled={saving}
+                        className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                        <X className="w-3.5 h-3.5" /> Cancel
                       </button>
                     </div>
 
@@ -506,74 +681,12 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                     <input
                       value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
-                      placeholder="e.g. Push Day"
-                      className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+                      placeholder="e.g. Lower Body Power"
+                      className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none mb-4"
                       disabled={saving}
                     />
 
-                    <div className="mt-4">
-                      <label className="block text-xs font-semibold text-muted-foreground mb-2">Exercises</label>
-                      <div className="mt-3 space-y-2">
-                        {editExercises.map((ex, i) => (
-                          <div key={`edit-ex-${i}`} className="bg-secondary rounded-xl px-4 py-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-xs font-semibold text-muted-foreground">Exercise {i + 1}</p>
-                              <button
-                                type="button"
-                                onClick={() => removeEditExerciseRow(i)}
-                                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                                disabled={saving || editExercises.length <= 1}
-                              >
-                                Remove
-                              </button>
-                            </div>
-                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                              <div className="sm:col-span-2">
-                                <ExerciseCombobox
-                                  value={ex.name}
-                                  onChange={(name) =>
-                                    setEditExercises((prev) => prev.map((row, idx) => (idx === i ? { ...row, name } : row)))
-                                  }
-                                  disabled={saving}
-                                  placeholder="Search exercises…"
-                                />
-                              </div>
-                              <input
-                                value={typeof ex.target_sets === "number" ? String(ex.target_sets) : ""}
-                                onChange={(e) => {
-                                  const next = e.target.value;
-                                  const n = next.trim() === "" ? null : Number(next);
-                                  setEditExercises((prev) =>
-                                    prev.map((row, idx) =>
-                                      idx === i ? { ...row, target_sets: Number.isFinite(n as number) ? (n as number) : null } : row,
-                                    ),
-                                  );
-                                }}
-                                placeholder="Target sets"
-                                inputMode="numeric"
-                                className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-                                disabled={saving}
-                              />
-                              <input
-                                value={ex.target_reps}
-                                onChange={(e) =>
-                                  setEditExercises((prev) => prev.map((row, idx) => (idx === i ? { ...row, target_reps: e.target.value } : row)))
-                                }
-                                placeholder='Target reps (e.g. "8-10")'
-                                className="sm:col-span-3 w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-                                disabled={saving}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                        <div>
-                          <SecondaryButton type="button" onClick={addEditExerciseRow} disabled={saving}>
-                            <Plus className="w-4 h-4" />
-                            Add exercise
-                          </SecondaryButton>
-                        </div>
-                      </div>
-                    </div>
+                    <BlockBuilder blocks={editBlocks} setBlocks={setEditBlocks} disabled={saving} />
 
                     <div className="mt-5">
                       <PrimaryButton type="button" onClick={() => void saveEdit()} disabled={saving} loading={saving}>
@@ -588,40 +701,44 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-foreground">{t.title}</p>
-                        <p className="text-xs text-muted-foreground">{t.exercises.length} exercise{t.exercises.length === 1 ? "" : "s"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {exercisesToBlocks(t.exercises).length} block{exercisesToBlocks(t.exercises).length === 1 ? "" : "s"} · {t.exercises.length} exercise{t.exercises.length === 1 ? "" : "s"}
+                        </p>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(t)}
-                          className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                          disabled={!!editTarget}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                          Edit
+                        <button type="button" onClick={() => startEdit(t)} disabled={!!editTarget}
+                          className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+                          <Pencil className="w-3.5 h-3.5" /> Edit
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(t)}
-                          className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Delete
+                        <button type="button" onClick={() => setDeleteTarget(t)}
+                          className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" /> Delete
                         </button>
                       </div>
                     </div>
-                    {t.exercises.length > 0 && (
-                      <div className="mt-3 space-y-1">
-                        {t.exercises.map((ex, i) => (
-                          <p key={`${t.id}-${ex.id}`} className="text-xs text-muted-foreground">
-                            {i + 1}. {ex.name}
-                            {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
-                              ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
-                              : ""}
-                          </p>
-                        ))}
-                      </div>
-                    )}
+                    {/* Block preview */}
+                    <div className="mt-3 space-y-2">
+                      {exercisesToBlocks(t.exercises).map((block) => {
+                        const col = BLOCK_COLORS[block.color] ?? BLOCK_COLORS.a;
+                        return (
+                          <div key={block._key} className={`rounded-xl border ${col.border} ${col.bg} px-3 py-2`}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <div className={`w-2 h-2 rounded-full ${col.dot}`} />
+                              <p className={`text-xs font-bold ${col.text}`}>{block.label}</p>
+                              {block.rest_seconds && (
+                                <p className="text-xs text-muted-foreground ml-auto">Rest {block.rest_seconds}s</p>
+                              )}
+                            </div>
+                            {block.exercises.map((ex, ei) => (
+                              <p key={ex._key} className="text-xs text-muted-foreground pl-3.5">
+                                {block.exercises.length > 1 ? `${ei + 1}. ` : ""}{ex.name}
+                                {(ex.target_sets || ex.target_reps) ? ` — ${ex.target_sets ?? "—"}×${ex.target_reps || "—"}` : ""}
+                              </p>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ),
               )}
@@ -629,102 +746,80 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
           )}
         </div>
 
-        {/* ── Active sessions ── */}
-        <div className="mt-6 bg-card border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-muted-foreground">Active sessions</p>
-            {!loadingAssignment && (
-              <span className="text-xs text-muted-foreground">
-                {assignment?.assignments.length ?? 0} active
-              </span>
-            )}
-          </div>
+        {/* ── This week's session ── */}
+        <div className="mt-6 bg-card border border-border rounded-2xl shadow-card p-5">
+          <p className="text-xs font-semibold text-muted-foreground mb-3">This week's session</p>
 
-          {loadingAssignment ? (
-            <p className="px-5 py-4 text-sm text-muted-foreground">Loading…</p>
-          ) : assignmentError ? (
-            <p className="px-5 py-4 text-sm text-destructive">{assignmentError}</p>
-          ) : !assignment || assignment.assignments.length === 0 ? (
-            <p className="px-5 py-4 text-sm text-muted-foreground">No active sessions. Assign one below.</p>
-          ) : (
-            <div className="divide-y divide-border">
-              {assignment.assignments.map((a) => (
-                <div key={a.id} className="p-4 bg-background">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Assigned {a.created_at ? new Date(a.created_at).toLocaleDateString() : "—"}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void removeAssignment(a.id)}
-                      disabled={removingId === a.id}
-                      className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      {removingId === a.id ? "Removing…" : "Remove"}
-                    </button>
-                  </div>
-                  {a.template && a.template.exercises.length > 0 && (
-                    <div className="mt-3 space-y-1">
-                      {a.template.exercises.map((ex, i) => (
-                        <p key={`${a.id}-${ex.id}`} className="text-xs text-muted-foreground">
-                          {i + 1}. {ex.name}
-                          {typeof ex.target_sets === "number" || (ex.target_reps ?? "").trim().length > 0
-                            ? ` (${typeof ex.target_sets === "number" ? ex.target_sets : "—"} sets x ${ex.target_reps || "—"})`
-                            : ""}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                  <div className="mt-3">
-                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Notes</label>
-                    <textarea
-                      value={notesMap[a.id] ?? ""}
-                      onChange={(e) => setNotesMap((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                      placeholder="Add a note visible to players…"
-                      rows={2}
-                      className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none resize-none"
-                    />
-                    <div className="mt-1.5">
-                      <SecondaryButton
-                        type="button"
-                        onClick={() => void saveNotes(a.id)}
-                        disabled={savingNotesId === a.id}
-                      >
-                        {savingNotesId === a.id ? "Saving…" : "Save notes"}
-                      </SecondaryButton>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── Assign session ── */}
-        <div className="mt-4 bg-card border border-border rounded-2xl shadow-card p-5">
-          <p className="text-xs font-semibold text-muted-foreground mb-3">Assign session</p>
-
-          <label className="block text-xs font-semibold text-muted-foreground mb-2">Template</label>
-          <select
-            value={selectedTemplateId}
-            onChange={(e) => setSelectedTemplateId(e.target.value)}
+          <label className="block text-xs font-semibold text-muted-foreground mb-2">Week start</label>
+          <input
+            type="date"
+            value={toISODateInputValue(weekStartInput)}
+            onChange={(e) => setWeekStartInput(e.target.value)}
             className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
-            disabled={loadingTemplates || templates.length === 0}
-          >
-            <option value="">Select a template…</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>{t.title}</option>
-            ))}
-          </select>
+          />
 
           <div className="mt-4">
-            <PrimaryButton type="button" onClick={() => void assignSession()} disabled={assigning || !selectedTemplateId} loading={assigning}>
-              Assign to team
+            <label className="block text-xs font-semibold text-muted-foreground mb-2">Template</label>
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => setSelectedTemplateId(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground outline-none"
+              disabled={loadingTemplates || templates.length === 0}
+            >
+              <option value="">Select a template…</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-5">
+            <PrimaryButton type="button" onClick={() => void assignWeekly()} disabled={assigning} loading={assigning}>
+              Assign
             </PrimaryButton>
+          </div>
+
+          <div className="mt-5">
+            {loadingAssignment ? (
+              <p className="text-sm text-muted-foreground">Loading current assignments…</p>
+            ) : assignmentError ? (
+              <p className="text-sm text-destructive">{assignmentError}</p>
+            ) : !assignment || assignment.assignments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No sessions assigned for this week.</p>
+            ) : (
+              <div className="space-y-3">
+                {assignment.assignments.map((a) => (
+                  <div key={a.id} className="border border-border rounded-2xl p-4 bg-background">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
+                        <p className="text-xs text-muted-foreground">Week starting {a.week_start}</p>
+                      </div>
+                      <button type="button" onClick={() => void removeAssignment(a.id)} disabled={removingId === a.id}
+                        className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50">
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {removingId === a.id ? "Removing…" : "Remove"}
+                      </button>
+                    </div>
+                    <div className="mt-3">
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Notes</label>
+                      <textarea
+                        value={notesMap[a.id] ?? ""}
+                        onChange={(e) => setNotesMap((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                        placeholder="Add a note visible to players…"
+                        rows={2}
+                        className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none resize-none"
+                      />
+                      <div className="mt-1.5">
+                        <SecondaryButton type="button" onClick={() => void saveNotes(a.id)} disabled={savingNotesId === a.id}>
+                          {savingNotesId === a.id ? "Saving…" : "Save notes"}
+                        </SecondaryButton>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </PageContainer>
@@ -739,20 +834,12 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
             </p>
             <p className="text-xs text-muted-foreground mb-6">This cannot be undone.</p>
             <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleting}
-                className="flex-1 px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm font-semibold hover:bg-secondary transition-colors"
-              >
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={deleting}
+                className="flex-1 px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm font-semibold hover:bg-secondary transition-colors">
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={() => void deleteTemplate()}
-                disabled={deleting}
-                className="flex-1 px-4 py-3 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
-              >
+              <button type="button" onClick={() => void deleteTemplate()} disabled={deleting}
+                className="flex-1 px-4 py-3 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60">
                 {deleting ? "Deleting…" : "Delete"}
               </button>
             </div>

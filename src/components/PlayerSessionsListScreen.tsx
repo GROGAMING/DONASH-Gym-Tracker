@@ -18,7 +18,13 @@ type ApiExercise = {
   sort_order: number;
   target_sets: number | null;
   target_reps: string | null;
+  block_label: string | null;
 };
+
+function countBlocks(exercises: ApiExercise[]): number {
+  const labels = new Set(exercises.map((e) => e.block_label ?? ""));
+  return labels.size;
+}
 
 type SessionItem = {
   id: string;
@@ -146,7 +152,7 @@ export default function PlayerSessionsListScreen({ teamName }: { teamName: strin
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground mt-1">
-                      {s.exercises.length} exercise{s.exercises.length === 1 ? "" : "s"}
+                      {countBlocks(s.exercises)} block{countBlocks(s.exercises) === 1 ? "" : "s"} · {s.exercises.length} exercise{s.exercises.length === 1 ? "" : "s"}
                     </p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground mt-1" />
