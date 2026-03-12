@@ -24,6 +24,11 @@ type ExerciseRow = {
   sort_order: number;
   target_sets: number | null;
   target_reps: string | null;
+  block_label: string | null;
+  block_color: string | null;
+  group_index: number;
+  coaching_notes: string | null;
+  rest_seconds: number | null;
 };
 
 export async function GET() {
@@ -91,7 +96,7 @@ export async function GET() {
 
   const { data: exercises, error: eErr } = await supabase
     .from("session_template_exercises")
-    .select("id, template_id, name, sort_order, target_sets, target_reps")
+    .select("id, template_id, name, sort_order, target_sets, target_reps, block_label, block_color, group_index, coaching_notes, rest_seconds")
     .in("template_id", templateIds)
     .order("sort_order", { ascending: true });
 
@@ -119,6 +124,11 @@ export async function GET() {
           sort_order: ex.sort_order,
           target_sets: ex.target_sets,
           target_reps: ex.target_reps,
+          block_label: ex.block_label,
+          block_color: ex.block_color,
+          group_index: ex.group_index,
+          coaching_notes: ex.coaching_notes,
+          rest_seconds: ex.rest_seconds,
         })),
       })),
     },

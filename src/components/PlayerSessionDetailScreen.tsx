@@ -19,7 +19,79 @@ type ApiExercise = {
   sort_order: number;
   target_sets: number | null;
   target_reps: string | null;
+  block_label: string | null;
+  block_color: string | null;
+  group_index: number;
+  coaching_notes: string | null;
+  rest_seconds: number | null;
 };
+
+type BlockColor = "warmup" | "a" | "b" | "c" | "conditioning" | "extra";
+
+const BLOCK_COLORS: Record<BlockColor, { bg: string; border: string; text: string; dot: string }> = {
+  warmup:       { bg: "bg-zinc-100 dark:bg-zinc-800",    border: "border-zinc-300 dark:border-zinc-600",   text: "text-zinc-700 dark:text-zinc-300",   dot: "bg-zinc-400" },
+  a:            { bg: "bg-emerald-50 dark:bg-emerald-950", border: "border-emerald-300 dark:border-emerald-700", text: "text-emerald-800 dark:text-emerald-300", dot: "bg-emerald-500" },
+  b:            { bg: "bg-blue-50 dark:bg-blue-950",     border: "border-blue-300 dark:border-blue-700",   text: "text-blue-800 dark:text-blue-300",   dot: "bg-blue-500" },
+  c:            { bg: "bg-purple-50 dark:bg-purple-950", border: "border-purple-300 dark:border-purple-700", text: "text-purple-800 dark:text-purple-300", dot: "bg-purple-500" },
+  conditioning: { bg: "bg-orange-50 dark:bg-orange-950", border: "border-orange-300 dark:border-orange-700", text: "text-orange-800 dark:text-orange-300", dot: "bg-orange-500" },
+  extra:        { bg: "bg-pink-50 dark:bg-pink-950",     border: "border-pink-300 dark:border-pink-700",   text: "text-pink-800 dark:text-pink-300",   dot: "bg-pink-500" },
+};
+
+type GroupType = "standard" | "superset" | "triset";
+
+type ExerciseBlock = {
+  label: string;
+  color: BlockColor;
+  rest_seconds: number | null;
+  group_type: GroupType;
+  exercises: ApiExercise[];
+};
+
+function decodeBlockLabel(encoded: string): { label: string; group_type: GroupType } {
+  const sep = encoded.indexOf("||");
+  if (sep === -1) return { label: encoded, group_type: "standard" };
+  const gt = encoded.slice(sep + 2) as GroupType;
+  const validGt: GroupType[] = ["standard", "superset", "triset"];
+  return { label: encoded.slice(0, sep), group_type: validGt.includes(gt) ? gt : "standard" };
+}
+
+function restSecondsToMinsLabel(seconds: number | null): string | null {
+  if (!seconds || seconds <= 0) return null;
+  const mins = seconds / 60;
+  const rounded = Math.round(mins * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded} mins` : `${rounded} mins`;
+}
+
+function parseCondReps(target_reps: string | null): Record<string, string> | null {
+  if (!target_reps) return null;
+  try {
+    const obj = JSON.parse(target_reps) as Record<string, string>;
+    if (typeof obj === "object" && obj !== null && ("rounds" in obj || "work" in obj)) return obj;
+  } catch { /* not JSON */ }
+  return null;
+}
+
+function groupExercisesIntoBlocks(exercises: ApiExercise[]): ExerciseBlock[] {
+  const blockMap = new Map<string, ExerciseBlock>();
+  const order: string[] = [];
+  for (const ex of exercises) {
+    const rawLabel = ex.block_label ?? "";
+    const key = rawLabel || "__ungrouped__";
+    if (!blockMap.has(key)) {
+      const { label, group_type } = decodeBlockLabel(rawLabel);
+      blockMap.set(key, {
+        label,
+        color: (ex.block_color as BlockColor | undefined) ?? "a",
+        rest_seconds: ex.rest_seconds ?? null,
+        group_type,
+        exercises: [],
+      });
+      order.push(key);
+    }
+    blockMap.get(key)!.exercises.push(ex);
+  }
+  return order.map((k) => blockMap.get(k)!);
+}
 
 type ApiResponse = {
   session: {
@@ -255,7 +327,7 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
 
   const addSet = useCallback((exerciseId: string) => {
     setSetsByExercise((prev) => {
-      const next = { ...prev, [exerciseId]: [...(prev[exerciseId] ?? makeDefaultRows({ id: exerciseId, name: "", sort_order: 0, target_sets: null, target_reps: null })), newSetRow()] };
+      const next = { ...prev, [exerciseId]: [...(prev[exerciseId] ?? makeDefaultRows({ id: exerciseId, name: "", sort_order: 0, target_sets: null, target_reps: null, block_label: null, block_color: null, group_index: 0, coaching_notes: null, rest_seconds: null })), newSetRow()] };
       triggerAutosave(next, collapsedExercise);
       return next;
     });
@@ -358,92 +430,142 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
               </div>
             </div>
 
-            <div className="space-y-3">
-              {data.session.exercises.map((ex) => {
-                const rows = setsByExercise[ex.id] ?? makeDefaultRows(ex);
-                const isCollapsed = collapsedExercise[ex.id] === true;
-                const last = lastTime?.last?.[ex.id] ?? [];
-                const summary = buildSummary(rows);
-
+            <div className="space-y-5">
+              {groupExercisesIntoBlocks(data.session.exercises).map((block) => {
+                const col = BLOCK_COLORS[block.color] ?? BLOCK_COLORS.a;
                 return (
-                  <div key={ex.id} className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
-                    {/* Header — always visible */}
-                    <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{ex.name}</p>
-                        {isCollapsed ? (
-                          <p className="text-xs text-muted-foreground mt-0.5">{summary}</p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Target: {typeof ex.target_sets === "number" ? ex.target_sets : "—"} × {ex.target_reps || "—"}
-                          </p>
+                  <div key={block.label || "__ungrouped__"} className={`rounded-2xl border-2 ${col.border} overflow-hidden`}>
+                    {/* Block header */}
+                    {block.label ? (
+                      <div className={`flex items-center gap-2 px-4 py-2.5 ${col.bg} border-b ${col.border}`}>
+                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${col.dot}`} />
+                        <p className={`text-sm font-bold flex-1 ${col.text}`}>{block.label}</p>
+                        {block.group_type === "superset" && (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg bg-black/10 ${col.text}`}>Superset</span>
+                        )}
+                        {block.group_type === "triset" && (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg bg-black/10 ${col.text}`}>Tri-set</span>
+                        )}
+                        {restSecondsToMinsLabel(block.rest_seconds) && (
+                          <p className={`text-xs font-medium ${col.text} opacity-70`}>Rest between sets: {restSecondsToMinsLabel(block.rest_seconds)}</p>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleCollapsed(ex.id)}
-                        className="shrink-0 flex items-center gap-1.5 text-xs font-semibold transition-colors text-foreground"
-                      >
-                        {isCollapsed ? (
-                          <>
-                            <CheckCircle2 className="w-4 h-4 text-primary" />
-                            <span>Done</span>
-                            <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">Mark done</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+                    ) : null}
 
-                    {/* Collapsible body */}
-                    {!isCollapsed && (
-                      <div className="px-5 pb-5">
-                        {last.length > 0 && (
-                          <p className="text-xs text-muted-foreground mb-3">
-                            Last time: {last.slice().sort((a, b) => a.set_number - b.set_number).map((s) => `${s.weight ?? "—"} × ${s.reps ?? "—"}`).join(", ")}
-                          </p>
-                        )}
+                    {/* Exercises in this block */}
+                    <div className="divide-y divide-border">
+                      {block.exercises.map((ex) => {
+                        const rows = setsByExercise[ex.id] ?? makeDefaultRows(ex);
+                        const isCollapsed = collapsedExercise[ex.id] === true;
+                        const last = lastTime?.last?.[ex.id] ?? [];
+                        const summary = buildSummary(rows);
 
-                        <div className="space-y-2">
-                          {/* Column headers */}
-                          <div className="grid grid-cols-12 gap-2 mb-1">
-                            <div className="col-span-2" />
-                            <p className="col-span-5 text-xs font-semibold text-muted-foreground px-1">kg</p>
-                            <p className="col-span-5 text-xs font-semibold text-muted-foreground px-1">reps</p>
-                          </div>
+                        const isConditioning = block.color === "conditioning";
+                        const condFields = isConditioning ? parseCondReps(ex.target_reps) : null;
 
-                          {rows.map((s, idx) => (
-                            <div key={s.id} className="grid grid-cols-12 gap-2 items-center">
-                              <div className="col-span-2 flex items-center">
-                                <p className="text-xs font-semibold text-muted-foreground">{idx + 1}</p>
+                        return (
+                          <div key={ex.id} className="bg-card">
+                            {/* Exercise header */}
+                            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-foreground truncate">{ex.name}</p>
+                                {isCollapsed ? (
+                                  <p className="text-xs text-muted-foreground mt-0.5">{isConditioning ? "Conditioning" : summary}</p>
+                                ) : isConditioning ? (
+                                  <div className="mt-1 space-y-0.5">
+                                    {condFields?.rounds && <p className="text-xs text-muted-foreground">{condFields.rounds} rounds</p>}
+                                    {condFields?.distance && <p className="text-xs text-muted-foreground">{condFields.distance}</p>}
+                                    {condFields?.work && <p className="text-xs text-muted-foreground">Work: {condFields.work}</p>}
+                                    {condFields?.rest && <p className="text-xs text-muted-foreground">Rest: {condFields.rest}</p>}
+                                    {condFields?.notes && <p className="text-xs text-muted-foreground italic">{condFields.notes}</p>}
+                                    {!condFields && ex.target_reps && <p className="text-xs text-muted-foreground">{ex.target_reps}</p>}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Target: {typeof ex.target_sets === "number" ? ex.target_sets : "—"} × {ex.target_reps || "—"}
+                                  </p>
+                                )}
                               </div>
-                              <input
-                                value={s.weight}
-                                onChange={(e) => updateSet(ex.id, s.id, { weight: e.target.value })}
-                                placeholder="—"
-                                inputMode="decimal"
-                                className="col-span-5 px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none focus:border-ring"
-                              />
-                              <input
-                                value={s.reps}
-                                onChange={(e) => updateSet(ex.id, s.id, { reps: e.target.value })}
-                                placeholder="—"
-                                inputMode="numeric"
-                                className="col-span-5 px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none focus:border-ring"
-                              />
+                              <button
+                                type="button"
+                                onClick={() => toggleCollapsed(ex.id)}
+                                className="shrink-0 flex items-center gap-1.5 text-xs font-semibold transition-colors text-foreground"
+                              >
+                                {isCollapsed ? (
+                                  <>
+                                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                                    <span>Done</span>
+                                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-muted-foreground">Mark done</span>
+                                  </>
+                                )}
+                              </button>
                             </div>
-                          ))}
 
-                          <div className="pt-1">
-                            <SecondaryButton type="button" onClick={() => addSet(ex.id)}>+ Add set</SecondaryButton>
+                            {/* Coaching note */}
+                            {!isCollapsed && ex.coaching_notes && (
+                              <div className="mx-5 mb-3 px-3 py-2 rounded-xl bg-secondary border border-border">
+                                <p className="text-xs text-muted-foreground">{ex.coaching_notes}</p>
+                              </div>
+                            )}
+
+                            {/* Collapsible body — hide set logging for conditioning */}
+                            {!isCollapsed && !isConditioning && (
+                              <div className="px-5 pb-5">
+                                {last.length > 0 && (
+                                  <p className="text-xs text-muted-foreground mb-3">
+                                    Last time: {last.slice().sort((a, b) => a.set_number - b.set_number).map((s) => `${s.weight ?? "—"} × ${s.reps ?? "—"}`).join(", ")}
+                                  </p>
+                                )}
+
+                                <div className="space-y-2">
+                                  <div className="grid grid-cols-12 gap-2 mb-1">
+                                    <div className="col-span-2" />
+                                    <p className="col-span-5 text-xs font-semibold text-muted-foreground px-1">kg</p>
+                                    <p className="col-span-5 text-xs font-semibold text-muted-foreground px-1">reps</p>
+                                  </div>
+
+                                  {rows.map((s, idx) => (
+                                    <div key={s.id} className="grid grid-cols-12 gap-2 items-center">
+                                      <div className="col-span-2 flex items-center">
+                                        <p className="text-xs font-semibold text-muted-foreground">{idx + 1}</p>
+                                      </div>
+                                      <input
+                                        value={s.weight}
+                                        onChange={(e) => updateSet(ex.id, s.id, { weight: e.target.value })}
+                                        placeholder="—"
+                                        inputMode="decimal"
+                                        className="col-span-5 px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none focus:border-ring"
+                                      />
+                                      <input
+                                        value={s.reps}
+                                        onChange={(e) => updateSet(ex.id, s.id, { reps: e.target.value })}
+                                        placeholder="—"
+                                        inputMode="numeric"
+                                        className="col-span-5 px-3 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm outline-none focus:border-ring"
+                                      />
+                                    </div>
+                                  ))}
+
+                                  <div className="pt-1">
+                                    <SecondaryButton type="button" onClick={() => addSet(ex.id)}>+ Add set</SecondaryButton>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {!isCollapsed && isConditioning && (
+                              <div className="px-5 pb-5">
+                                <p className="text-xs text-muted-foreground">Conditioning — no set logging required.</p>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      </div>
-                    )}
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}

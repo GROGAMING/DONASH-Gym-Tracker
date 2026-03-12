@@ -17,7 +17,7 @@ const TABS: { id: Tab; label: string; Icon: React.FC<{ className?: string }> }[]
 ];
 
 const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => (
-  <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-t border-border safe-bottom">
+  <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-t border-border" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
     <div className="flex items-stretch max-w-screen-sm mx-auto px-2 sm:px-4">
       {TABS.map(({ id, label, Icon }) => {
         const isActive = active === id;

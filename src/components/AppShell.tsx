@@ -51,7 +51,7 @@ export default function AppShell(
   return (
     <div className="min-h-dvh bg-background flex flex-col">
       <TeamHeader teamName={teamName} />
-      <main className={"flex-1 overflow-y-auto " + (showBottomNav ? "pb-24" : "")}>{children}</main>
+      <main className={"flex-1 w-full " + (showBottomNav ? "pb-28" : "")} style={showBottomNav ? { paddingBottom: "calc(7rem + env(safe-area-inset-bottom, 0px))" } : undefined}>{children}</main>
       {showBottomNav && <BottomNav active={active} onChange={onChange} />}
     </div>
   );

@@ -39,12 +39,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const exercises = rawExercises
     .map((x) => {
-      const row = x as { name?: unknown; target_sets?: unknown; target_reps?: unknown };
+      const row = x as { name?: unknown; target_sets?: unknown; target_reps?: unknown; block_label?: unknown; block_color?: unknown; group_index?: unknown; coaching_notes?: unknown; rest_seconds?: unknown };
       const name = typeof row?.name === "string" ? row.name.trim() : "";
       return {
         name,
         target_sets: normalizeTargetSets(row?.target_sets),
         target_reps: normalizeTargetReps(row?.target_reps),
+        block_label: typeof row?.block_label === "string" ? row.block_label.trim() || null : null,
+        block_color: typeof row?.block_color === "string" ? row.block_color.trim() || null : null,
+        group_index: typeof row?.group_index === "number" && Number.isFinite(row.group_index) ? Math.max(0, Math.floor(row.group_index)) : 0,
+        coaching_notes: typeof row?.coaching_notes === "string" ? row.coaching_notes.trim() || null : null,
+        rest_seconds: typeof row?.rest_seconds === "number" && Number.isFinite(row.rest_seconds) && row.rest_seconds > 0 ? Math.floor(row.rest_seconds) : null,
       };
     })
     .filter((x) => x.name.length > 0);
@@ -87,12 +92,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     sort_order: idx + 1,
     target_sets: ex.target_sets,
     target_reps: ex.target_reps,
+    block_label: ex.block_label,
+    block_color: ex.block_color,
+    group_index: ex.group_index,
+    coaching_notes: ex.coaching_notes,
+    rest_seconds: ex.rest_seconds,
   }));
 
   const { data: exRows, error: exErr } = await supabaseAdmin
     .from("session_template_exercises")
     .insert(exerciseInserts)
-    .select("id, template_id, name, sort_order, target_sets, target_reps")
+    .select("id, template_id, name, sort_order, target_sets, target_reps, block_label, block_color, group_index, coaching_notes, rest_seconds")
     .order("sort_order", { ascending: true });
 
   if (exErr) return NextResponse.json({ error: exErr.message }, { status: 500 });
@@ -103,13 +113,18 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     title: row.title,
     created_at: row.created_at,
     exercises: (exRows ?? []).map((ex) => {
-      const e = ex as { id: string; name: string; sort_order: number; target_sets: number | null; target_reps: string | null };
+      const e = ex as { id: string; name: string; sort_order: number; target_sets: number | null; target_reps: string | null; block_label: string | null; block_color: string | null; group_index: number; coaching_notes: string | null; rest_seconds: number | null };
       return {
         id: e.id,
         name: e.name,
         sort_order: e.sort_order,
         target_sets: e.target_sets,
         target_reps: e.target_reps,
+        block_label: e.block_label,
+        block_color: e.block_color,
+        group_index: e.group_index,
+        coaching_notes: e.coaching_notes,
+        rest_seconds: e.rest_seconds,
       };
     }),
   });
