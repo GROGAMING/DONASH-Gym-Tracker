@@ -140,9 +140,9 @@ export default function PlayerSessionsListScreen({ teamName }: { teamName: strin
                     <p className="font-display font-extrabold text-lg text-foreground">
                       {(s.template_title ?? "").trim().length > 0 ? s.template_title : "Active session"}
                     </p>
-                    {s.created_at && (
+                    {s.week_start && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        Assigned {new Date(s.created_at).toLocaleDateString()}
+                        Week of {s.week_start}
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground mt-1">

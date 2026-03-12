@@ -39,11 +39,45 @@ export async function GET(req: NextRequest) {
   if (!isAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
-  const tab = url.searchParams.get("tab") ?? "summary";          // summary | player | exercise
+  const tab = url.searchParams.get("tab") ?? "summary";          // summary | player
   const playerId = url.searchParams.get("playerId") ?? "";
-  const exerciseName = url.searchParams.get("exerciseName") ?? "";
 
-  // ── 1. Fetch all session logs for this team ──────────────────────────────
+  // ── 1. Fetch players ──────────────────────────────────────────────────────
+  const { data: users, error: uErr } = await supabaseAdmin
+    .from("users")
+    .select("id, name")
+    .eq("team_id", TEAM_ID)
+    .order("name");
+
+  if (uErr) return NextResponse.json({ error: uErr.message }, { status: 500 });
+  const allUsers = (users ?? []) as UserRow[];
+  const userMap = new Map(allUsers.map((u) => [u.id, u.name]));
+
+  // ── 2. Session counts per player (non-draft rows = completed sessions) ────
+  //    is_draft = false is the reliable signal: /api/player-sessions/log always
+  //    inserts without is_draft (defaults false). Drafts are inserted with
+  //    is_draft = true and completed_at = null.
+  const { data: completedSessions, error: csErr } = await supabaseAdmin
+    .from("player_session_logs")
+    .select("player_id")
+    .eq("team_id", TEAM_ID)
+    .eq("is_draft", false);
+
+  if (csErr) return NextResponse.json({ error: csErr.message }, { status: 500 });
+
+  const sessionCountByPlayer = new Map<string, number>();
+  for (const row of (completedSessions ?? []) as { player_id: string }[]) {
+    sessionCountByPlayer.set(row.player_id, (sessionCountByPlayer.get(row.player_id) ?? 0) + 1);
+  }
+
+  // Enrich users list with session counts
+  const playersWithCounts = allUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    sessionCount: sessionCountByPlayer.get(u.id) ?? 0,
+  }));
+
+  // ── 3. Fetch all session logs for this team ──────────────────────────────
   const { data: sessionLogs, error: slErr } = await supabaseAdmin
     .from("player_session_logs")
     .select("id, player_id, created_at")
@@ -55,37 +89,26 @@ export async function GET(req: NextRequest) {
   const allSessionLogs = (sessionLogs ?? []) as SessionLogRow[];
   const sessionLogIds = allSessionLogs.map((s) => s.id);
 
-  // ── 2. Fetch all set logs ────────────────────────────────────────────────
+  // ── 4. Fetch all set logs ────────────────────────────────────────────────
+  //    Short-circuit if there are no session logs yet, but still return
+  //    players with their counts (they may have completed sessions but no sets).
+  if (sessionLogIds.length === 0) {
+    return NextResponse.json(buildEmptyWithPlayers(playersWithCounts));
+  }
+
   let setQuery = supabaseAdmin
     .from("player_set_logs")
     .select("id, player_session_log_id, exercise_id, exercise_name, set_number, reps, weight, created_at")
     .eq("team_id", TEAM_ID)
+    .in("player_session_log_id", sessionLogIds)
     .order("created_at", { ascending: false });
-
-  if (sessionLogIds.length > 0) {
-    setQuery = setQuery.in("player_session_log_id", sessionLogIds);
-  } else {
-    return NextResponse.json(buildEmpty());
-  }
 
   const { data: setLogs, error: setErr } = await setQuery;
   if (setErr) return NextResponse.json({ error: setErr.message }, { status: 500 });
   const allSetLogs = (setLogs ?? []) as SetLogRow[];
 
-  // ── 3. Fetch players ─────────────────────────────────────────────────────
-  const { data: users, error: uErr } = await supabaseAdmin
-    .from("users")
-    .select("id, name")
-    .eq("team_id", TEAM_ID)
-    .order("name");
-
-  if (uErr) return NextResponse.json({ error: uErr.message }, { status: 500 });
-  const allUsers = (users ?? []) as UserRow[];
-  const userMap = new Map(allUsers.map((u) => [u.id, u.name]));
-
   // ── session log → player map ─────────────────────────────────────────────
   const sessionToPlayer = new Map(allSessionLogs.map((s) => [s.id, s.player_id]));
-  const sessionToCreatedAt = new Map(allSessionLogs.map((s) => [s.id, s.created_at]));
 
   // ── SUMMARY tab ──────────────────────────────────────────────────────────
   if (tab === "summary") {
@@ -133,10 +156,7 @@ export async function GET(req: NextRequest) {
       totalVolume: Math.round(totalVolume),
       mostLoggedExercise: mostLoggedExercise || null,
       mostLoggedCount: mostLoggedExercise ? mostLoggedCount : 0,
-      players: allUsers,
-      exerciseNames: Array.from(
-        new Set(allSetLogs.map((s) => s.exercise_name.trim()).filter(Boolean))
-      ).sort(),
+      players: playersWithCounts,
     });
   }
 
@@ -145,9 +165,7 @@ export async function GET(req: NextRequest) {
     if (!playerId) {
       return NextResponse.json({
         tab: "player",
-        players: allUsers,
-        exerciseNames: [],
-        exercises: [],
+        players: playersWithCounts,
       });
     }
 
@@ -198,89 +216,25 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       tab: "player",
-      players: allUsers,
+      players: playersWithCounts,
       playerName: userMap.get(playerId) ?? "Unknown",
       exercises,
-    });
-  }
-
-  // ── BY-EXERCISE tab ───────────────────────────────────────────────────────
-  if (tab === "exercise") {
-    const exerciseNames = Array.from(
-      new Set(allSetLogs.map((s) => s.exercise_name.trim()).filter(Boolean))
-    ).sort();
-
-    if (!exerciseName) {
-      return NextResponse.json({ tab: "exercise", exerciseNames, players: [] });
-    }
-
-    const exSets = allSetLogs.filter(
-      (s) => s.exercise_name.trim().toLowerCase() === exerciseName.trim().toLowerCase()
-    );
-
-    // Group by player
-    const byPlayer = new Map<string, SetLogRow[]>();
-    for (const s of exSets) {
-      const pid = sessionToPlayer.get(s.player_session_log_id) ?? "";
-      byPlayer.set(pid, [...(byPlayer.get(pid) ?? []), s]);
-    }
-
-    const playerStats = Array.from(byPlayer.entries()).map(([pid, sets]) => {
-      const name = userMap.get(pid) ?? "Unknown";
-      const withWeight = sets.filter((s) => s.weight != null && s.reps != null);
-
-      // Best set = highest 1RM proxy (weight × reps)
-      const bestSet = withWeight.reduce<SetLogRow | null>((best, s) => {
-        if (!best) return s;
-        return s.weight! * s.reps! > best.weight! * best.reps! ? s : best;
-      }, null);
-
-      // Last set = most recent
-      const lastSet = sets[0] ?? null;
-
-      // Previous set = second most recent
-      const prevSet = sets[1] ?? null;
-
-      return {
-        playerId: pid,
-        playerName: name,
-        totalSets: sets.length,
-        bestSet: bestSet
-          ? { reps: bestSet.reps, weight: bestSet.weight, created_at: bestSet.created_at }
-          : null,
-        lastSet: lastSet
-          ? { reps: lastSet.reps, weight: lastSet.weight, created_at: lastSet.created_at }
-          : null,
-        prevSet: prevSet
-          ? { reps: prevSet.reps, weight: prevSet.weight, created_at: prevSet.created_at }
-          : null,
-      };
-    });
-
-    playerStats.sort((a, b) => b.totalSets - a.totalSets);
-
-    return NextResponse.json({
-      tab: "exercise",
-      exerciseNames,
-      exerciseName,
-      players: playerStats,
     });
   }
 
   return NextResponse.json({ error: "Unknown tab" }, { status: 400 });
 }
 
-function buildEmpty() {
+function buildEmptyWithPlayers(players: { id: string; name: string; sessionCount: number }[]) {
   return {
     tab: "summary",
-    totalPlayers: 0,
+    totalPlayers: players.length,
     pctLoggedLast7Days: 0,
     playersLoggedLast7Days: 0,
     totalSets: 0,
     totalVolume: 0,
     mostLoggedExercise: null,
     mostLoggedCount: 0,
-    players: [],
-    exerciseNames: [],
+    players,
   };
 }

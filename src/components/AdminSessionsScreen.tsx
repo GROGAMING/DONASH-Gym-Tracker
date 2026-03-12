@@ -386,7 +386,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
           </div>
           <div>
             <h2 className="font-display font-extrabold text-xl text-foreground leading-tight">Sessions</h2>
-            <p className="text-xs text-muted-foreground">Create templates and assign this week’s session</p>
+            <p className="text-xs text-muted-foreground">Create templates and assign persistent sessions</p>
           </div>
         </div>
 
