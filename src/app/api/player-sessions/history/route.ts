@@ -78,16 +78,21 @@ export async function GET(req: NextRequest) {
       .is("team_id", null),
   ]);
 
-  // ── Main query: filter by player_id + completed signal ──
-  // We do NOT hard-require team_id here so legacy rows (wrong/missing team_id)
-  // are still returned. We trust player_id as the primary key for ownership.
-  // Include a row if ANY of these is true:
+  // ── PERMANENT HISTORY QUERY ──────────────────────────────────────────────
+  // DO NOT add date filters, week filters, or .limit() here.
+  // This must return ALL completed logs for this player, all time.
+  //
+  // Rows are "completed" if ANY of:
   //   is_draft = false   (normal completed row)
-  //   is_draft IS NULL   (legacy row inserted before the column existed)
-  //   completed_at IS NOT NULL  (belt-and-suspenders for any edge case)
+  //   is_draft IS NULL   (legacy row inserted before is_draft column existed)
+  //   completed_at IS NOT NULL  (belt-and-suspenders)
+  //
+  // snapshot_week_start / snapshot_template_title are written at log time
+  // and survive weekly_sessions deletion (FK is ON DELETE SET NULL now).
+  // ──────────────────────────────────────────────────────────────────────────
   const { data: logs, error: lErr } = await supabaseAdmin
     .from("player_session_logs")
-    .select("id, created_at, completed_at, weekly_session_id, is_draft, team_id")
+    .select("id, created_at, completed_at, weekly_session_id, is_draft, team_id, snapshot_week_start, snapshot_template_title")
     .eq("player_id", playerId)
     .or("is_draft.eq.false,is_draft.is.null,completed_at.not.is.null")
     .order("completed_at", { ascending: false, nullsFirst: false })
@@ -97,14 +102,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: lErr.message, diag }, { status: 500 });
   }
 
-  const logRows = (logs ?? []) as { id: string; created_at: string; completed_at: string | null; weekly_session_id: string; team_id: string | null }[];
+  const logRows = (logs ?? []) as {
+    id: string;
+    created_at: string;
+    completed_at: string | null;
+    weekly_session_id: string | null;
+    team_id: string | null;
+    snapshot_week_start: string | null;
+    snapshot_template_title: string | null;
+  }[];
 
   if (logRows.length === 0) {
     return NextResponse.json({ logs: [], diag });
   }
 
   const logIds = logRows.map((l) => l.id);
-  const weeklyIds = Array.from(new Set(logRows.map((l) => l.weekly_session_id).filter(Boolean)));
+  // Only resolve weekly_sessions for rows that still have a FK reference
+  // (rows whose weekly_sessions was deleted will have weekly_session_id = NULL;
+  //  those rows still appear in history via their snapshot columns).
+  const weeklyIds = Array.from(new Set(logRows.map((l) => l.weekly_session_id).filter(Boolean))) as string[];
 
   // Fetch weekly session info (best-effort — no team_id filter so legacy rows resolve)
   let weeklyById: Record<string, any> = {};
@@ -140,17 +156,23 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     diag,
     logs: logRows.map((l) => {
-      const w = weeklyById[l.weekly_session_id] as any | undefined;
+      const w = l.weekly_session_id ? (weeklyById[l.weekly_session_id] as any | undefined) : undefined;
+
+      // Use snapshot columns first (written at log time, immune to deletions).
+      // Fall back to live weekly_sessions join for rows logged before snapshots were added.
+      const weekStart = l.snapshot_week_start ?? w?.week_start ?? null;
+      const templateTitle = l.snapshot_template_title ?? w?.session_templates?.title ?? null;
+
       return {
         id: l.id,
         created_at: l.created_at,
         completed_at: l.completed_at,
-        weekly_session: w
+        weekly_session: (w || weekStart)
           ? {
-              id: w.id,
-              week_start: w.week_start,
-              template_id: w.template_id,
-              template_title: w.session_templates?.title ?? null,
+              id: w?.id ?? null,
+              week_start: weekStart,
+              template_id: w?.template_id ?? null,
+              template_title: templateTitle,
             }
           : null,
         sets: (setsByLog[l.id] ?? []).map((s) => ({

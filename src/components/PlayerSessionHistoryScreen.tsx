@@ -29,14 +29,15 @@ type ApiResponse = {
     created_at: string;
     completed_at: string | null;
     weekly_session: null | {
-      id: string;
-      week_start: string;
-      template_id: string;
+      id: string | null;          // null when weekly_sessions row was deleted (FK SET NULL)
+      week_start: string | null;
+      template_id: string | null;
       template_title: string | null;
     };
     sets: SetEntry[];
   }[];
   error?: string;
+  diag?: Record<string, number>;
 };
 
 function formatLoggedDate(completed_at: string | null, created_at: string): string {
@@ -156,7 +157,7 @@ export default function PlayerSessionHistoryScreen({ teamName }: { teamName: str
                         {l.weekly_session?.template_title ?? "Session"}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Week starting {l.weekly_session?.week_start ?? "—"}
+                        {l.weekly_session?.week_start ? `Week starting ${l.weekly_session.week_start}` : formatLoggedDate(l.completed_at, l.created_at)}
                       </p>
                     </div>
                     <p className="text-xs font-semibold text-muted-foreground shrink-0 mt-0.5">
@@ -180,7 +181,7 @@ export default function PlayerSessionHistoryScreen({ teamName }: { teamName: str
                     <div className="mt-4">
                       <PrimaryButton
                         type="button"
-                        onClick={() => router.push(`/sessions/${encodeURIComponent(l.weekly_session!.id)}`)}
+                        onClick={() => router.push(`/sessions/${encodeURIComponent(l.weekly_session!.id as string)}`)}
                       >
                         Open session
                       </PrimaryButton>

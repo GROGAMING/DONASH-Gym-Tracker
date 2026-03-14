@@ -55,14 +55,20 @@ export async function POST(req: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
+  // Fetch weekly session + template title for snapshot (permanent history record).
+  // Snapshot columns are written at log time so history survives if weekly_sessions
+  // rows are later deleted (FK is now ON DELETE SET NULL, not CASCADE).
   const { data: weekly, error: wErr } = await supabase
     .from("weekly_sessions")
-    .select("id")
+    .select("id, week_start, session_templates(id, title)")
     .eq("team_id", currentTeamId)
     .eq("id", weeklySessionId)
     .single();
 
   if (wErr || !weekly) return NextResponse.json({ error: "Weekly session not found" }, { status: 404 });
+
+  const snapshotWeekStart = (weekly as any).week_start as string | null ?? null;
+  const snapshotTemplateTitle = ((weekly as any).session_templates as { title?: string } | null)?.title ?? null;
 
   const { data: player, error: pErr } = await supabase
     .from("users")
@@ -96,13 +102,18 @@ export async function POST(req: Request) {
 
   let sessionLogId: string;
 
+  const completedAt = new Date().toISOString();
+
   if (existingRow && existingRow.is_draft === true) {
     // Draft exists: promote it to a completed log.
+    // Write snapshot columns so history is preserved even if weekly_sessions row is later removed.
     const { error: upErr } = await supabase
       .from("player_session_logs")
       .update({
         is_draft: false,
-        completed_at: completed ? new Date().toISOString() : new Date().toISOString(),
+        completed_at: completedAt,
+        snapshot_week_start: snapshotWeekStart,
+        snapshot_template_title: snapshotTemplateTitle,
       })
       .eq("id", existingRow.id);
 
@@ -113,7 +124,7 @@ export async function POST(req: Request) {
 
     sessionLogId = existingRow.id;
   } else {
-    // No existing row — insert fresh.
+    // No existing row — insert fresh with snapshot columns.
     const { data: sessionLog, error: lErr } = await supabase
       .from("player_session_logs")
       .insert({
@@ -121,7 +132,9 @@ export async function POST(req: Request) {
         weekly_session_id: weeklySessionId,
         player_id: playerId,
         is_draft: false,
-        completed_at: completed ? new Date().toISOString() : new Date().toISOString(),
+        completed_at: completedAt,
+        snapshot_week_start: snapshotWeekStart,
+        snapshot_template_title: snapshotTemplateTitle,
       })
       .select("id")
       .single();
