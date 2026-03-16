@@ -98,7 +98,12 @@ export default function UploadReviewScreen({ teamName }: { teamName: string }) {
     try {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 
-      const fileToUpload = await compressImage(draft.file).catch(() => draft.file);
+      console.log("[Upload] Original file — name:", draft.file.name, "type:", JSON.stringify(draft.file.type), "size:", draft.file.size, "bytes");
+      const fileToUpload = await compressImage(draft.file).catch((err) => {
+        console.warn("[Upload] compressImage failed (HEIC/unsupported?), uploading original:", err instanceof Error ? err.message : err);
+        return draft.file;
+      });
+      console.log("[Upload] Uploading — name:", fileToUpload.name, "type:", JSON.stringify(fileToUpload.type), "size:", fileToUpload.size, "bytes");
 
       const formData = new FormData();
       formData.set("userId", draft.userId);

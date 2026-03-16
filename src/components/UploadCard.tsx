@@ -19,9 +19,25 @@ const UploadCard: React.FC<UploadCardProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
+  const ALLOWED_PHOTO_TYPES = new Set([
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "image/gif",
+    "image/bmp",
+    "image/tiff",
+  ]);
+
   const handleFile = (file: File) => {
-    if (file && file.type.startsWith("image/")) {
+    console.log("[UploadCard] File selected:", file.name, "type:", JSON.stringify(file.type), "size:", file.size, "bytes");
+    const mimeOk = file.type === "" || ALLOWED_PHOTO_TYPES.has(file.type) || file.type.startsWith("image/");
+    if (file && mimeOk) {
       onFileSelect(file);
+    } else {
+      console.warn("[UploadCard] File rejected — unexpected type:", JSON.stringify(file.type));
     }
   };
 
