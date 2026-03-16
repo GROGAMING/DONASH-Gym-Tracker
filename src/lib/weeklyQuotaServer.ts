@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabaseAdmin";
 import { mondayWeekStartISO } from "./week";
+import { TEAM_ID } from "./team";
 
 // Server-side function to get required weekly sessions
 export async function getRequiredWeeklySessions(): Promise<number> {
@@ -7,6 +8,7 @@ export async function getRequiredWeeklySessions(): Promise<number> {
     const { data, error } = await supabaseAdmin
       .from("app_settings")
       .select("value_int")
+      .eq("team_id", TEAM_ID)
       .eq("key", "required_sessions_weekly")
       .single();
 
@@ -22,11 +24,15 @@ export async function getRequiredWeeklySessions(): Promise<number> {
         console.log("Setting not found, creating with default value");
         const { data: newData, error: insertError } = await supabaseAdmin
           .from("app_settings")
-          .upsert({
-            key: "required_sessions_weekly",
-            value_int: 3,
-            updated_at: new Date().toISOString()
-          })
+          .upsert(
+            {
+              team_id: TEAM_ID,
+              key: "required_sessions_weekly",
+              value_int: 3,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "team_id,key" },
+          )
           .select("value_int")
           .single();
 

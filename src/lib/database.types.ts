@@ -4,19 +4,22 @@ export type Database = {
     Tables: {
       app_settings: {
         Row: {
+          team_id: string;
           key: string;
           value_int: number;
           updated_at: string;
         };
         Insert: {
+          team_id: string;
           key: string;
           value_int: number;
           updated_at: string;
         };
         Update: {
-          key: string;
-          value_int: number;
-          updated_at: string;
+          team_id?: string;
+          key?: string;
+          value_int?: number;
+          updated_at?: string;
         };
       };
       users: {
