@@ -1,12 +1,14 @@
-import { supabase } from "./supabaseClient";
+import "server-only";
 import { supabaseAdmin } from "./supabaseAdmin";
+import { TEAM_ID } from "./team";
 
 // Get required weekly sessions setting
 export async function getRequiredWeeklySessions(): Promise<number> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("app_settings")
       .select("value_int")
+      .eq("team_id", TEAM_ID)
       .eq("key", "required_sessions_weekly")
       .single();
 
@@ -36,15 +38,17 @@ export async function getRequiredWeeklySessions(): Promise<number> {
 // Set required weekly sessions setting (admin only)
 export async function setRequiredWeeklySessions(value: 1 | 2 | 3 | 4): Promise<void> {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabaseAdmin
       .from("app_settings")
-      .upsert({
-        key: "required_sessions_weekly",
-        value_int: value,
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single();
+      .upsert(
+        {
+          team_id: TEAM_ID,
+          key: "required_sessions_weekly",
+          value_int: value,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "team_id,key" },
+      );
 
     if (error) {
       console.error("Error setting required sessions:", {
@@ -55,7 +59,7 @@ export async function setRequiredWeeklySessions(value: 1 | 2 | 3 | 4): Promise<v
       throw error;
     }
 
-    console.log("Successfully updated required sessions to:", value);
+    console.log("Successfully updated required sessions to:", value, "for team:", TEAM_ID);
   } catch (error) {
     console.error("Failed to set required sessions:", error);
     throw error;
@@ -67,11 +71,15 @@ async function createDefaultSetting(): Promise<number> {
   try {
     const { data, error } = await supabaseAdmin
       .from("app_settings")
-      .upsert({
-        key: "required_sessions_weekly",
-        value_int: 3,
-        updated_at: new Date().toISOString()
-      })
+      .upsert(
+        {
+          team_id: TEAM_ID,
+          key: "required_sessions_weekly",
+          value_int: 3,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "team_id,key" },
+      )
       .select("value_int")
       .single();
 
@@ -93,6 +101,7 @@ export async function getRequiredWeeklySessionsServer(): Promise<number> {
     const { data, error } = await supabaseAdmin
       .from("app_settings")
       .select("value_int")
+      .eq("team_id", TEAM_ID)
       .eq("key", "required_sessions_weekly")
       .single();
 
@@ -122,8 +131,13 @@ export async function setRequiredWeeklySessionsServer(value: number): Promise<vo
   const { error } = await supabaseAdmin
     .from("app_settings")
     .upsert(
-      { key: "required_sessions_weekly", value_int: value, updated_at: new Date().toISOString() },
-      { onConflict: "key" },
+      {
+        team_id: TEAM_ID,
+        key: "required_sessions_weekly",
+        value_int: value,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "team_id,key" },
     );
 
   if (error) {

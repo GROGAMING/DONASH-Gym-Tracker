@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabaseAdmin";
 import { mondayWeekStartISO } from "./week";
+import { TEAM_ID } from "./team";
 
 // Get required weekly sessions setting
 export async function getRequiredWeeklySessions(): Promise<1 | 2 | 3 | 4> {
@@ -7,6 +8,7 @@ export async function getRequiredWeeklySessions(): Promise<1 | 2 | 3 | 4> {
     const { data, error } = await supabaseAdmin
       .from("app_settings")
       .select("value_int")
+      .eq("team_id", TEAM_ID)
       .eq("key", "required_sessions_weekly")
       .single();
 
