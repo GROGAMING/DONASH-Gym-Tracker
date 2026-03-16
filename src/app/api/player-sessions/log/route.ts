@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getTeamIdForPlayer } from "@/lib/resolveTeam";
 
 export const dynamic = "force-dynamic";
@@ -48,39 +48,39 @@ export async function POST(req: Request) {
   if (!playerId) return NextResponse.json({ error: "Missing playerId" }, { status: 400 });
 
   const currentTeamId = await getTeamIdForPlayer(playerId);
-  if (!currentTeamId) return NextResponse.json({ error: "Player not found" }, { status: 404 });
+  if (!currentTeamId) {
+    console.error("[log] Player not found in any team — playerId:", playerId);
+    return NextResponse.json({ error: "Player not found" }, { status: 404 });
+  }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  console.log("[log] Request — playerId:", playerId, "weeklySessionId:", weeklySessionId, "teamId:", currentTeamId);
 
   // Fetch weekly session + template title for snapshot (permanent history record).
   // Snapshot columns are written at log time so history survives if weekly_sessions
   // rows are later deleted (FK is now ON DELETE SET NULL, not CASCADE).
-  const { data: weekly, error: wErr } = await supabase
+  // Using supabaseAdmin (service-role key) so RLS never blocks server-side operations.
+  const { data: weekly, error: wErr } = await supabaseAdmin
     .from("weekly_sessions")
     .select("id, week_start, session_templates(id, title)")
     .eq("team_id", currentTeamId)
     .eq("id", weeklySessionId)
     .single();
 
-  if (wErr || !weekly) return NextResponse.json({ error: "Weekly session not found" }, { status: 404 });
+  if (wErr || !weekly) {
+    console.error("[log] Weekly session not found — weeklySessionId:", weeklySessionId, "teamId:", currentTeamId, "error:", wErr?.message);
+    return NextResponse.json({ error: "Weekly session not found" }, { status: 404 });
+  }
 
   const snapshotWeekStart = (weekly as any).week_start as string | null ?? null;
   const snapshotTemplateTitle = ((weekly as any).session_templates as { title?: string } | null)?.title ?? null;
 
-  const { data: player, error: pErr } = await supabase
-    .from("users")
-    .select("id")
-    .eq("team_id", currentTeamId)
-    .eq("id", playerId)
-    .single();
-
-  if (pErr || !player) return NextResponse.json({ error: "Player not found" }, { status: 404 });
+  // Note: player existence is already confirmed by getTeamIdForPlayer (uses admin client).
+  // Re-querying via anon key here would be subject to RLS and could return
+  // "JSON object requested, multiple (or no) rows returned" for users without
+  // matching auth.uid() — that was the root cause of user-specific failures.
 
   // Check for an existing row (draft or completed) for this player + weekly session.
-  const { data: existing, error: existErr } = await supabase
+  const { data: existing, error: existErr } = await supabaseAdmin
     .from("player_session_logs")
     .select("id, is_draft")
     .eq("team_id", currentTeamId)
@@ -88,7 +88,10 @@ export async function POST(req: Request) {
     .eq("weekly_session_id", weeklySessionId)
     .maybeSingle();
 
-  if (existErr) return NextResponse.json({ error: existErr.message }, { status: 500 });
+  if (existErr) {
+    console.error("[log] Error checking existing log — playerId:", playerId, "weeklySessionId:", weeklySessionId, "error:", existErr.message);
+    return NextResponse.json({ error: existErr.message }, { status: 500 });
+  }
 
   const existingRow = existing as { id: string; is_draft: boolean } | null;
 
@@ -107,7 +110,8 @@ export async function POST(req: Request) {
   if (existingRow && existingRow.is_draft === true) {
     // Draft exists: promote it to a completed log.
     // Write snapshot columns so history is preserved even if weekly_sessions row is later removed.
-    const { error: upErr } = await supabase
+    console.log("[log] Promoting draft to completed — draftId:", existingRow.id, "playerId:", playerId, "weeklySessionId:", weeklySessionId, "snapshotWeekStart:", snapshotWeekStart, "snapshotTemplateTitle:", snapshotTemplateTitle);
+    const { error: upErr } = await supabaseAdmin
       .from("player_session_logs")
       .update({
         is_draft: false,
@@ -117,29 +121,37 @@ export async function POST(req: Request) {
       })
       .eq("id", existingRow.id);
 
-    if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
+    if (upErr) {
+      console.error("[log] Failed to promote draft — draftId:", existingRow.id, "error:", upErr.message);
+      return NextResponse.json({ error: upErr.message }, { status: 500 });
+    }
 
     // Replace the draft's sets with the final submitted sets.
-    await supabase.from("player_set_logs").delete().eq("player_session_log_id", existingRow.id);
+    await supabaseAdmin.from("player_set_logs").delete().eq("player_session_log_id", existingRow.id);
 
     sessionLogId = existingRow.id;
   } else {
     // No existing row — insert fresh with snapshot columns.
-    const { data: sessionLog, error: lErr } = await supabase
+    const insertPayload = {
+      team_id: currentTeamId,
+      weekly_session_id: weeklySessionId,
+      player_id: playerId,
+      is_draft: false,
+      completed_at: completedAt,
+      snapshot_week_start: snapshotWeekStart,
+      snapshot_template_title: snapshotTemplateTitle,
+    };
+    console.log("[log] Inserting new session log — payload:", JSON.stringify(insertPayload));
+    const { data: sessionLog, error: lErr } = await supabaseAdmin
       .from("player_session_logs")
-      .insert({
-        team_id: currentTeamId,
-        weekly_session_id: weeklySessionId,
-        player_id: playerId,
-        is_draft: false,
-        completed_at: completedAt,
-        snapshot_week_start: snapshotWeekStart,
-        snapshot_template_title: snapshotTemplateTitle,
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
 
-    if (lErr || !sessionLog) return NextResponse.json({ error: lErr?.message || "Failed to create log" }, { status: 500 });
+    if (lErr || !sessionLog) {
+      console.error("[log] Insert failed — payload:", JSON.stringify(insertPayload), "error:", lErr?.message);
+      return NextResponse.json({ error: lErr?.message || "Failed to create log" }, { status: 500 });
+    }
     sessionLogId = (sessionLog as { id: string }).id;
   }
 
@@ -166,8 +178,12 @@ export async function POST(req: Request) {
     .filter((r) => r.exercise_name.length > 0 && r.set_number > 0);
 
   if (setRows.length > 0) {
-    const { error: sErr } = await supabase.from("player_set_logs").insert(setRows);
-    if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
+    console.log("[log] Inserting", setRows.length, "set rows for sessionLogId:", sessionLogId);
+    const { error: sErr } = await supabaseAdmin.from("player_set_logs").insert(setRows);
+    if (sErr) {
+      console.error("[log] Set insert failed — sessionLogId:", sessionLogId, "error:", sErr.message);
+      return NextResponse.json({ error: sErr.message }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ ok: true, sessionLogId }, { headers: { "Cache-Control": "no-store" } });

@@ -157,7 +157,7 @@ function buildSummary(rows: SetRow[]): string {
 
 export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }: { teamName: string; weeklySessionId: string }) {
   const router = useRouter();
-  const { player } = useSelectedPlayer();
+  const { player, hydrated } = useSelectedPlayer();
   const playerId = player?.playerId ?? null;
 
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -354,11 +354,15 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
 
   const onLog = useCallback(async () => {
     if (logging) return;
+    if (!hydrated) { setToast({ message: "Loading player… try again in a moment.", type: "error" }); return; }
     if (!playerId) { setToast({ message: "Pick your name first.", type: "error" }); return; }
     const session = data?.session;
     if (!session) return;
 
     const sets = buildSetPayload(session);
+
+    console.log("[onLog] Submitting — playerId:", playerId, "weeklySessionId:", session.id, "setCount:", sets.length, "sets:", JSON.stringify(sets));
+
     setLogging(true);
     setToast(null);
 
@@ -371,24 +375,28 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
 
       const body = (await res.json().catch(() => null)) as { error?: string; alreadyLogged?: boolean } | null;
       if (!res.ok) {
+        const errMsg = body?.error || "Failed to log session.";
+        console.error("[onLog] Server error —", res.status, errMsg);
         if (body?.alreadyLogged) {
           setToast({ message: "Already logged — see your history.", type: "success" });
           router.push("/sessions/history");
           return;
         }
-        setToast({ message: body?.error || "Failed to log session.", type: "error" });
+        setToast({ message: errMsg, type: "error" });
         return;
       }
 
       try { localStorage.removeItem(localKey(playerId, weeklySessionId)); } catch { /* ignore */ }
       setToast({ message: "Session logged!", type: "success" });
       setTimeout(() => router.push("/sessions/history"), 800);
-    } catch {
-      setToast({ message: "Failed to log session.", type: "error" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to log session.";
+      console.error("[onLog] Fetch threw:", msg);
+      setToast({ message: msg, type: "error" });
     } finally {
       setLogging(false);
     }
-  }, [buildSetPayload, data?.session, logging, playerId, router, weeklySessionId]);
+  }, [buildSetPayload, data?.session, hydrated, logging, playerId, router, weeklySessionId]);
 
   return (
     <AppShell teamName={teamName}>
