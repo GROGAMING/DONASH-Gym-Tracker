@@ -67,73 +67,76 @@ export async function GET(req: NextRequest) {
 
   // ── Step 3: group sets by exercise, keeping only the most-recent log per exercise ──
   //
-  // Matching priority:
-  //   1. exercise_id (UUID) — exact match, most reliable
-  //   2. exercise_name (text, trimmed, case-insensitive) — fallback for rows where
-  //      exercise_id is null (logged before the column existed, or exercise was re-created)
+  // Key insight: the same exercise may appear in different logs with different exercise_id
+  // values (or no exercise_id at all if logged before the column was populated). Using
+  // exercise_id as the grouping key therefore splits what is actually one exercise into
+  // multiple buckets, causing sets from different logs to both pass the "best log" filter.
   //
-  // For each exercise key we track which log (by position in logOrder) is the newest,
-  // then emit only the sets from that single log.
+  // Solution: use normalised exercise_name as the single grouping key for resolving
+  // "which log is the most recent for this exercise". Once we know the best log per name,
+  // we emit the result under BOTH the exercise_id (for the primary UI lookup) AND the
+  // normalised name (for the fallback lookup), but always from the SAME single log.
+  //
+  // A set is only valid if it has at least one real value (weight or reps not null).
+  // Sets where both weight and reps are null are placeholder rows and are excluded.
 
-  // keyed by exercise_id when present, else by normalised name
-  const bestLogIdx: Record<string, number> = {};    // key → index in logOrder (lower = newer)
-  const bestLogId: Record<string, string> = {};     // key → log id
+  // Pass A: find the best (most recent) log id per normalised exercise name
+  const bestLogIdxByName: Record<string, number> = {};  // normName → index in logOrder
+  const bestLogIdByName: Record<string, string> = {};   // normName → log id
 
   for (const s of sets ?? []) {
-    const exId = asString((s as any).exercise_id);
     const exName = asString((s as any).exercise_name).toLowerCase();
-    const key = exId || exName;
-    if (!key) continue;
+    if (!exName) continue;
 
     const logId = asString((s as any).player_session_log_id);
     const idx = logOrder[logId] ?? Number.MAX_SAFE_INTEGER;
 
-    if (!(key in bestLogIdx) || idx < bestLogIdx[key]) {
-      bestLogIdx[key] = idx;
-      bestLogId[key] = logId;
+    if (!(exName in bestLogIdxByName) || idx < bestLogIdxByName[exName]) {
+      bestLogIdxByName[exName] = idx;
+      bestLogIdByName[exName] = logId;
     }
   }
 
-  // Now collect the sets for each exercise's best (most recent) log
-  const resultById: Record<string, any[]> = {};     // keyed by exercise_id (for UI lookup)
-  const resultByName: Record<string, any[]> = {};   // keyed by normalised name (fallback)
+  // Pass B: collect only the sets from the best log for each exercise,
+  //         skipping sets where both weight and reps are null/missing.
+  //         Emit under exercise_id key (primary) and normalised name key (fallback).
+  const last: Record<string, any[]> = {};
 
   for (const s of sets ?? []) {
     const exId = asString((s as any).exercise_id);
     const exName = asString((s as any).exercise_name).toLowerCase();
-    const key = exId || exName;
-    if (!key) continue;
+    if (!exName) continue;
 
     const logId = asString((s as any).player_session_log_id);
-    if (logId !== bestLogId[key]) continue;   // not from the most-recent log for this exercise
+    if (logId !== bestLogIdByName[exName]) continue;  // not the most-recent log for this exercise
+
+    // Skip placeholder sets — must have at least weight OR reps
+    const weight = (s as any).weight;
+    const reps = (s as any).reps;
+    if (weight == null && reps == null) continue;
 
     const entry = {
-      reps: (s as any).reps,
-      weight: (s as any).weight,
+      reps,
+      weight,
       set_number: (s as any).set_number,
       created_at: (s as any).created_at,
       exercise_name: (s as any).exercise_name,
     };
 
-    // Store under exercise_id (primary lookup in UI: lastTime?.last?.[ex.id])
+    // Primary lookup key: exercise_id (matches ex.id in UI)
     if (exId) {
-      if (!resultById[exId]) resultById[exId] = [];
-      resultById[exId].push(entry);
+      if (!last[exId]) last[exId] = [];
+      last[exId].push(entry);
     }
 
-    // Also store under normalised name so the UI can fall back if ex.id differs
-    if (exName) {
-      if (!resultByName[exName]) resultByName[exName] = [];
-      resultByName[exName].push(entry);
-    }
+    // Fallback lookup key: normalised name (used when ex.id differs or is absent)
+    if (!last[exName]) last[exName] = [];
+    last[exName].push(entry);
   }
 
-  // Merge: start with id-keyed results, add name-keyed under the same key
-  // so the UI receives both lookup paths in one flat map.
-  const last: Record<string, any[]> = { ...resultById };
-  for (const [name, entries] of Object.entries(resultByName)) {
-    if (!last[name]) last[name] = entries;   // only add if no id-keyed entry already present
-  }
+  // Remove name-keyed entries that are already covered by an id-keyed entry
+  // (they are identical data — keeping both is harmless but wastes bytes).
+  // We leave them in so the UI fallback still works without any extra logic.
 
   return NextResponse.json({ last }, { headers: { "Cache-Control": "no-store" } });
 }
