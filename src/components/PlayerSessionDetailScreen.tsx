@@ -539,11 +539,18 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
                             {/* Collapsible body — hide set logging for conditioning */}
                             {!isCollapsed && !isConditioning && (
                               <div className="px-5 pb-5">
-                                {last.length > 0 && (
-                                  <p className="text-xs text-muted-foreground mb-3">
-                                    Last time: {last.slice().sort((a, b) => a.set_number - b.set_number).map((s) => `${s.weight ?? "—"} × ${s.reps ?? "—"}`).join(", ")}
-                                  </p>
-                                )}
+                                {(() => {
+                                  const validSets = last
+                                    .filter((s) => s.weight != null || s.reps != null)
+                                    .slice()
+                                    .sort((a, b) => a.set_number - b.set_number);
+                                  if (validSets.length === 0) return null;
+                                  return (
+                                    <p className="text-xs text-muted-foreground mb-3">
+                                      Last time: {validSets.map((s) => `${s.weight ?? "—"} × ${s.reps ?? "—"}`).join(", ")}
+                                    </p>
+                                  );
+                                })()}
 
                                 <div className="space-y-2">
                                   <div className="grid grid-cols-12 gap-2 mb-1">
