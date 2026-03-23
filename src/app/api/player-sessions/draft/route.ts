@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getTeamIdForPlayer } from "@/lib/resolveTeam";
 
 export const dynamic = "force-dynamic";
@@ -42,12 +42,7 @@ export async function POST(req: Request) {
   const currentTeamId = await getTeamIdForPlayer(playerId);
   if (!currentTeamId) return NextResponse.json({ error: "Player not found" }, { status: 404 });
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
-
-  const { data: weekly, error: wErr } = await supabase
+  const { data: weekly, error: wErr } = await supabaseAdmin
     .from("weekly_sessions")
     .select("id")
     .eq("team_id", currentTeamId)
@@ -58,7 +53,7 @@ export async function POST(req: Request) {
 
   let draftId: string;
 
-  const { data: existing } = await supabase
+  const { data: existing } = await supabaseAdmin
     .from("player_session_logs")
     .select("id")
     .eq("team_id", currentTeamId)
@@ -70,7 +65,7 @@ export async function POST(req: Request) {
   if (existing) {
     draftId = (existing as { id: string }).id;
   } else {
-    const { data: created, error: cErr } = await supabase
+    const { data: created, error: cErr } = await supabaseAdmin
       .from("player_session_logs")
       .insert({
         team_id: currentTeamId,
@@ -86,7 +81,7 @@ export async function POST(req: Request) {
     draftId = (created as { id: string }).id;
   }
 
-  await supabase.from("player_set_logs").delete().eq("player_session_log_id", draftId);
+  await supabaseAdmin.from("player_set_logs").delete().eq("player_session_log_id", draftId);
 
   const rawSets = Array.isArray(body?.sets) ? (body?.sets as unknown[]) : [];
   const setRows = rawSets
@@ -103,7 +98,7 @@ export async function POST(req: Request) {
     .filter((r) => r.exercise_name.length > 0 && r.set_number > 0);
 
   if (setRows.length > 0) {
-    const { error: sErr } = await supabase.from("player_set_logs").insert(setRows);
+    const { error: sErr } = await supabaseAdmin.from("player_set_logs").insert(setRows);
     if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
   }
 
@@ -120,12 +115,7 @@ export async function GET(req: Request) {
   const currentTeamId = await getTeamIdForPlayer(playerId);
   if (!currentTeamId) return NextResponse.json({ draft: null });
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
-
-  const { data: draft } = await supabase
+  const { data: draft } = await supabaseAdmin
     .from("player_session_logs")
     .select("id")
     .eq("team_id", currentTeamId)
@@ -138,7 +128,7 @@ export async function GET(req: Request) {
 
   const draftId = (draft as { id: string }).id;
 
-  const { data: sets } = await supabase
+  const { data: sets } = await supabaseAdmin
     .from("player_set_logs")
     .select("exercise_id, exercise_name, set_number, reps, weight")
     .eq("player_session_log_id", draftId)
