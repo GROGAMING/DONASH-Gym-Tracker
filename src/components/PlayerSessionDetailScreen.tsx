@@ -192,14 +192,15 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    const templateId = data?.session?.template_id;
-    if (!playerId || !templateId) return;
+    if (!playerId || !weeklySessionId) return;
     (async () => {
-      const res = await fetch(`/api/player-sessions/last-time?playerId=${encodeURIComponent(playerId)}&templateId=${encodeURIComponent(templateId)}`);
+      const res = await fetch(
+        `/api/player-sessions/last-time?playerId=${encodeURIComponent(playerId)}&weeklySessionId=${encodeURIComponent(weeklySessionId)}`
+      );
       const body = (await res.json().catch(() => null)) as LastTimeResponse | null;
       setLastTime(res.ok ? body : { last: {}, error: body?.error || "Failed to load last time." });
     })();
-  }, [data?.session?.template_id, playerId]);
+  }, [playerId, weeklySessionId]);
 
   // Restore draft on load: Supabase first, fallback to localStorage, fallback to prefilled defaults
   useEffect(() => {
@@ -474,7 +475,12 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
                       {block.exercises.map((ex) => {
                         const rows = setsByExercise[ex.id] ?? makeDefaultRows(ex);
                         const isCollapsed = collapsedExercise[ex.id] === true;
-                        const last = lastTime?.last?.[ex.id] ?? [];
+                        // Primary lookup by exercise_id; fall back to normalised name
+                        // for legacy rows where exercise_id was null at log time.
+                        const last =
+                          lastTime?.last?.[ex.id] ??
+                          lastTime?.last?.[ex.name.trim().toLowerCase()] ??
+                          [];
                         const summary = buildSummary(rows);
 
                         const isConditioning = block.color === "conditioning";
