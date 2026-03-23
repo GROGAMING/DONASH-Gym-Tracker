@@ -361,6 +361,15 @@ export default function PlayerSessionDetailScreen({ teamName, weeklySessionId }:
 
     const sets = buildSetPayload(session);
 
+    // Cancel any pending autosave before submitting the final log.
+    // Prevents a race where the debounced draft POST fires concurrently
+    // with the log POST — both would find no existing row and attempt
+    // to insert, hitting the unique constraint or producing duplicates.
+    if (autosaveTimer.current) {
+      clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    }
+
     console.log("[onLog] Submitting — playerId:", playerId, "weeklySessionId:", session.id, "setCount:", sets.length, "sets:", JSON.stringify(sets));
 
     setLogging(true);
