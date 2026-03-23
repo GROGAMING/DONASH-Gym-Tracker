@@ -58,21 +58,24 @@ export async function POST(req: Request) {
   // Fetch weekly session + template title for snapshot (permanent history record).
   // Snapshot columns are written at log time so history survives if weekly_sessions
   // rows are later deleted (FK is now ON DELETE SET NULL, not CASCADE).
-  // Using supabaseAdmin (service-role key) so RLS never blocks server-side operations.
+  // Using maybeSingle() — not single() — because the weekly_sessions row may have been
+  // removed by an admin after the player opened the session page. A missing row must NOT
+  // block logging; we just store null snapshots and continue.
   const { data: weekly, error: wErr } = await supabaseAdmin
     .from("weekly_sessions")
     .select("id, week_start, session_templates(id, title)")
     .eq("team_id", currentTeamId)
     .eq("id", weeklySessionId)
-    .single();
+    .maybeSingle();
 
-  if (wErr || !weekly) {
-    console.error("[log] Weekly session not found — weeklySessionId:", weeklySessionId, "teamId:", currentTeamId, "error:", wErr?.message);
-    return NextResponse.json({ error: "Weekly session not found" }, { status: 404 });
+  if (wErr) {
+    console.error("[log] Error fetching weekly session — weeklySessionId:", weeklySessionId, "teamId:", currentTeamId, "error:", wErr.message);
+    return NextResponse.json({ error: wErr.message }, { status: 500 });
   }
 
-  const snapshotWeekStart = (weekly as any).week_start as string | null ?? null;
-  const snapshotTemplateTitle = ((weekly as any).session_templates as { title?: string } | null)?.title ?? null;
+  // weekly may be null if the row was deleted — snapshots will be null but log still proceeds.
+  const snapshotWeekStart = (weekly as any)?.week_start as string | null ?? null;
+  const snapshotTemplateTitle = ((weekly as any)?.session_templates as { title?: string } | null)?.title ?? null;
 
   // Note: player existence is already confirmed by getTeamIdForPlayer (uses admin client).
   // Re-querying via anon key here would be subject to RLS and could return
