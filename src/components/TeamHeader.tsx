@@ -2,7 +2,6 @@
 
 import React from "react";
 import Image from "next/image";
-import { Shield } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { useSelectedPlayer } from "@/lib/useSelectedPlayer";
@@ -18,14 +17,6 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ teamName }) => {
   return (
     <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border safe-top">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center shadow-button">
-          <Shield className="w-4 h-4 text-background" strokeWidth={2.5} />
-        </div>
-        <div className="flex flex-col flex-1 min-w-0">
-          <span className="text-[11px] font-medium text-muted-foreground leading-none mb-0.5">Rep Receipt</span>
-          <span className="font-display font-bold text-sm text-foreground leading-none truncate">{teamName}</span>
-        </div>
-
         <Image
           src="/rep-receipt-logo.png"
           alt="Rep Receipt"
@@ -35,6 +26,7 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ teamName }) => {
           priority
         />
 
+        <div className="flex items-center gap-3 ml-auto">
         {hydrated && player?.playerName && (
           <button
             type="button"
@@ -73,6 +65,7 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ teamName }) => {
             <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" stroke="none" />
           </svg>
         </a>
+        </div>
       </div>
     </header>
   );
