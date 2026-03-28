@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { Shield } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -24,6 +25,15 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ teamName }) => {
           <span className="text-[11px] font-medium text-muted-foreground leading-none mb-0.5">Rep Receipt</span>
           <span className="font-display font-bold text-sm text-foreground leading-none truncate">{teamName}</span>
         </div>
+
+        <Image
+          src="/rep-receipt-logo.png"
+          alt="Rep Receipt"
+          width={120}
+          height={32}
+          className="shrink-0 object-contain max-w-[120px] h-auto"
+          priority
+        />
 
         {hydrated && player?.playerName && (
           <button
