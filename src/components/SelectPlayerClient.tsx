@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserRound } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import PageContainer from "@/components/PageContainer";
@@ -62,9 +61,6 @@ export default function SelectPlayerClient({ teamName }: { teamName: string }) {
 
       <PageContainer className="pt-8 sm:pt-12 pb-8 animate-fade-up">
         <div className="mb-7">
-          <div className="w-12 h-12 rounded-2xl bg-foreground flex items-center justify-center shadow-button mb-4">
-            <UserRound className="w-5 h-5 text-background" strokeWidth={2} />
-          </div>
           <h2 className="font-display font-extrabold text-2xl text-foreground leading-tight">Pick your name</h2>
           <p className="text-sm text-muted-foreground mt-1">We'll remember you for this session</p>
         </div>
