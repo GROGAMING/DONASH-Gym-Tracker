@@ -16,13 +16,13 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ teamName }) => {
 
   return (
     <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border safe-top">
-      <div className="flex items-center justify-between gap-3 px-4 py-0.5">
+      <div className="flex items-center justify-between gap-3 px-4 py-1.5">
         <Image
           src="/rep-receipt-logo.png"
           alt="Rep Receipt"
-          width={120}
+          width={160}
           height={32}
-          className="shrink-0 object-contain max-w-[120px] h-auto"
+          className="shrink-0 object-contain h-8 w-auto"
           priority
         />
 
