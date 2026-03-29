@@ -16,7 +16,7 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ teamName }) => {
 
   return (
     <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border safe-top">
-      <div className="flex items-center justify-between gap-3 px-4 py-1.5">
+      <div className="flex items-center justify-between gap-3 px-4 py-0.5">
         <Image
           src="/rep-receipt-logo.png"
           alt="Rep Receipt"
