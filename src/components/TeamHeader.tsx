@@ -22,7 +22,7 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ teamName }) => {
           alt="Rep Receipt"
           width={200}
           height={32}
-          className="shrink-0 object-contain h-8 w-auto"
+          className="shrink-0 object-contain h-6 w-auto"
           priority
         />
 
