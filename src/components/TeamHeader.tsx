@@ -20,7 +20,7 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ teamName }) => {
         <Image
           src="/rep-receipt-logo.png"
           alt="Rep Receipt"
-          width={160}
+          width={200}
           height={32}
           className="shrink-0 object-contain h-8 w-auto"
           priority
