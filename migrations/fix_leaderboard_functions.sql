@@ -23,6 +23,7 @@
 -- ============================================================
 
 -- ── Weekly leaderboard ───────────────────────────────────────
+DROP FUNCTION IF EXISTS public.get_leaderboard_week(date);
 DROP FUNCTION IF EXISTS public.get_leaderboard_week(text);
 CREATE OR REPLACE FUNCTION public.get_leaderboard_week(p_week_start text)
 RETURNS TABLE(name text, count bigint)
@@ -45,7 +46,7 @@ AS $$
 $$;
 
 -- ── All-time leaderboard ─────────────────────────────────────
-DROP FUNCTION IF EXISTS public.get_leaderboard_overall();
+DROP FUNCTION IF EXISTS public.get_leaderboard_overall() CASCADE;
 CREATE OR REPLACE FUNCTION public.get_leaderboard_overall()
 RETURNS TABLE(name text, count bigint)
 LANGUAGE sql
