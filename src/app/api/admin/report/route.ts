@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 import { cookies } from "next/headers";
 import PDFDocument from "pdfkit";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { TEAM_NAME } from "@/lib/team";
+import { TEAM_ID, TEAM_NAME } from "@/lib/team";
 import { getRequiredWeeklySessionsServer } from "@/lib/settings";
 
 export async function GET(req: Request) {
@@ -25,8 +25,8 @@ export async function GET(req: Request) {
   }
 
   const [weekly, overall, users, quota] = await Promise.all([
-    supabaseAdmin.rpc("get_leaderboard_week", { p_week_start: weekStart }),
-    supabaseAdmin.rpc("get_leaderboard_overall"),
+    supabaseAdmin.rpc("get_leaderboard_week", { p_week_start: weekStart, p_team_id: TEAM_ID }),
+    supabaseAdmin.rpc("get_leaderboard_overall", { p_team_id: TEAM_ID }),
     supabaseAdmin.from("users").select("name").order("name"),
     getRequiredWeeklySessionsServer(),
   ]);

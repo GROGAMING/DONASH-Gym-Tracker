@@ -3,7 +3,10 @@ export function mondayWeekStartISO(d: Date): string {
   x.setHours(0, 0, 0, 0);
   const day = (x.getDay() + 6) % 7; // Monday=0
   x.setDate(x.getDate() - day);
-  return x.toISOString().slice(0, 10);
+  const yyyy = x.getFullYear();
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  const dd = String(x.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function mondayFromAnyDateISO(dateISO: string): string {

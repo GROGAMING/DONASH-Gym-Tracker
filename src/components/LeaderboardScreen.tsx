@@ -96,7 +96,7 @@ const LeaderRow: FC<{ entry: Row; rank: number; quota: number | null }> = (
   );
 };
 
-export default function LeaderboardScreen({ teamName }: { teamName: string }) {
+export default function LeaderboardScreen({ teamName, teamId }: { teamName: string; teamId: string }) {
   const router = useRouter();
   const weekStart = useMemo(() => mondayWeekStartISO(new Date()), []);
 
@@ -111,8 +111,8 @@ export default function LeaderboardScreen({ teamName }: { teamName: string }) {
       setStatus("");
 
       const [w, o, playersRes, settingsRes] = await Promise.all([
-        supabase.rpc("get_leaderboard_week", { p_week_start: weekStart }),
-        supabase.rpc("get_leaderboard_overall"),
+        supabase.rpc("get_leaderboard_week", { p_week_start: weekStart, p_team_id: teamId }),
+        supabase.rpc("get_leaderboard_overall", { p_team_id: teamId }),
         fetch("/api/players"),
         fetch("/api/settings"),
       ]);
