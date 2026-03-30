@@ -37,9 +37,8 @@ AS $$
   FROM public.users u
   LEFT JOIN public.player_session_logs psl
     ON  psl.player_id = u.id
-    AND psl.is_draft  = false
-    AND psl.completed_at >= (p_week_start::date)::timestamptz
-    AND psl.completed_at <  (p_week_start::date + interval '7 days')::timestamptz
+    AND (psl.is_draft = false OR psl.is_draft IS NULL)
+    AND psl.snapshot_week_start = p_week_start
   WHERE u.team_id IS NOT NULL
   GROUP BY u.name
   ORDER BY count DESC, u.name ASC;
@@ -59,7 +58,7 @@ AS $$
   FROM public.users u
   LEFT JOIN public.player_session_logs psl
     ON  psl.player_id = u.id
-    AND psl.is_draft  = false
+    AND (psl.is_draft = false OR psl.is_draft IS NULL)
   WHERE u.team_id IS NOT NULL
   GROUP BY u.name
   ORDER BY count DESC, u.name ASC;
