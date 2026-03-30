@@ -1,32 +1,30 @@
 -- ============================================================
--- Fix leaderboard RPC functions to query player_session_logs
+-- Restore leaderboard RPC functions to use uploads table
 -- ============================================================
--- ROOT CAUSE: get_leaderboard_week and get_leaderboard_overall
--- were querying the `uploads` table (photo-upload sessions).
--- Session logging writes to `player_session_logs`, which is a
--- completely separate table. The two leaderboard functions never
--- saw new session logs, so the leaderboard never updated after
--- a player logged a session.
+-- Source of truth: public.uploads (photo uploads)
+-- Columns used:  uploads.user_id  (fk -> users.id)
+--                uploads.team_id  (scopes to deployment team)
+--                uploads.status   'active' = visible upload
+--                uploads.created_at timestamptz
 --
--- FIX: Redefine both functions to count completed, non-draft
--- rows from player_session_logs joined to users for the name.
+-- Frontend calls:
+--   get_leaderboard_week({ p_week_start: 'YYYY-MM-DD', p_team_id: '<uuid>' })
+--   get_leaderboard_overall({ p_team_id: '<uuid>' })
 --
---   get_leaderboard_week(p_week_start text):
---     counts logs where completed_at >= p_week_start (Monday)
---     and completed_at < p_week_start + 7 days (next Monday).
---
---   get_leaderboard_overall():
---     counts all completed, non-draft logs.
---
--- Both functions are SECURITY DEFINER so the anon client can
--- call them without RLS blocking the underlying table reads.
+-- Both parameters arrive as text from the JS client.
+-- uploads.team_id and users.id are uuid in the live DB so we
+-- cast the text params to uuid for the join/filter.
 -- ============================================================
 
--- ── Weekly leaderboard ───────────────────────────────────────
+-- Drop every known overload so no stale signature blocks CREATE.
 DROP FUNCTION IF EXISTS public.get_leaderboard_week(date);
 DROP FUNCTION IF EXISTS public.get_leaderboard_week(text);
 DROP FUNCTION IF EXISTS public.get_leaderboard_week(text, text);
-CREATE OR REPLACE FUNCTION public.get_leaderboard_week(p_week_start text, p_team_id text)
+
+-- ── Weekly leaderboard ───────────────────────────────────────
+-- Counts active photo uploads for one team within one ISO week.
+-- Week window: [p_week_start 00:00 UTC, p_week_start + 7 days).
+CREATE FUNCTION public.get_leaderboard_week(p_week_start text, p_team_id text)
 RETURNS TABLE(name text, count bigint)
 LANGUAGE sql
 STABLE
@@ -34,33 +32,26 @@ SECURITY DEFINER
 AS $$
   SELECT
     u.name,
-    COUNT(psl.id) AS count
+    COUNT(up.id) AS count
   FROM public.users u
-  LEFT JOIN public.player_session_logs psl
-    ON  psl.player_id = u.id
-    AND psl.team_id::text = p_team_id
-    AND (psl.is_draft = false OR psl.is_draft IS NULL)
-    AND (
-      -- Primary: use snapshot_week_start written at log time
-      psl.snapshot_week_start = p_week_start
-      OR
-      -- Fallback: for older rows where snapshot is NULL, join weekly_sessions
-      (psl.snapshot_week_start IS NULL
-       AND EXISTS (
-         SELECT 1 FROM public.weekly_sessions ws
-         WHERE ws.id = psl.weekly_session_id
-           AND ws.week_start = p_week_start
-       ))
-    )
-  WHERE u.team_id::text = p_team_id
+  LEFT JOIN public.uploads up
+    ON  up.user_id  = u.id
+    AND up.team_id  = p_team_id::uuid
+    AND up.status   = 'active'
+    AND up.created_at >= (p_week_start::date)::timestamptz
+    AND up.created_at <  (p_week_start::date + interval '7 days')::timestamptz
+  WHERE u.team_id = p_team_id::uuid
   GROUP BY u.name
   ORDER BY count DESC, u.name ASC;
 $$;
 
--- ── All-time leaderboard ─────────────────────────────────────
+-- Drop every known overload of get_leaderboard_overall.
 DROP FUNCTION IF EXISTS public.get_leaderboard_overall() CASCADE;
 DROP FUNCTION IF EXISTS public.get_leaderboard_overall(text);
-CREATE OR REPLACE FUNCTION public.get_leaderboard_overall(p_team_id text)
+
+-- ── All-time leaderboard ─────────────────────────────────────
+-- Counts all active photo uploads for one team, no date filter.
+CREATE FUNCTION public.get_leaderboard_overall(p_team_id text)
 RETURNS TABLE(name text, count bigint)
 LANGUAGE sql
 STABLE
@@ -68,13 +59,13 @@ SECURITY DEFINER
 AS $$
   SELECT
     u.name,
-    COUNT(psl.id) AS count
+    COUNT(up.id) AS count
   FROM public.users u
-  LEFT JOIN public.player_session_logs psl
-    ON  psl.player_id = u.id
-    AND psl.team_id::text = p_team_id
-    AND (psl.is_draft = false OR psl.is_draft IS NULL)
-  WHERE u.team_id::text = p_team_id
+  LEFT JOIN public.uploads up
+    ON  up.user_id = u.id
+    AND up.team_id = p_team_id::uuid
+    AND up.status  = 'active'
+  WHERE u.team_id = p_team_id::uuid
   GROUP BY u.name
   ORDER BY count DESC, u.name ASC;
 $$;
