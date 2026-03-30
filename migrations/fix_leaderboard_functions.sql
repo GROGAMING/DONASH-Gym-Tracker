@@ -38,7 +38,7 @@ AS $$
   FROM public.users u
   LEFT JOIN public.player_session_logs psl
     ON  psl.player_id = u.id
-    AND psl.team_id   = p_team_id
+    AND psl.team_id::text = p_team_id
     AND (psl.is_draft = false OR psl.is_draft IS NULL)
     AND (
       -- Primary: use snapshot_week_start written at log time
@@ -52,7 +52,7 @@ AS $$
            AND ws.week_start = p_week_start
        ))
     )
-  WHERE u.team_id = p_team_id
+  WHERE u.team_id::text = p_team_id
   GROUP BY u.name
   ORDER BY count DESC, u.name ASC;
 $$;
@@ -72,9 +72,9 @@ AS $$
   FROM public.users u
   LEFT JOIN public.player_session_logs psl
     ON  psl.player_id = u.id
-    AND psl.team_id   = p_team_id
+    AND psl.team_id::text = p_team_id
     AND (psl.is_draft = false OR psl.is_draft IS NULL)
-  WHERE u.team_id = p_team_id
+  WHERE u.team_id::text = p_team_id
   GROUP BY u.name
   ORDER BY count DESC, u.name ASC;
 $$;
