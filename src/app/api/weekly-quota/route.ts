@@ -22,13 +22,16 @@ export async function GET(request: NextRequest) {
     // Get weekly session counts for each user
     const usersWithSessions = await Promise.all(
       users.map(async (user) => {
+        const weekStartDate = new Date(weekStart + "T00:00:00.000Z");
+        const nextMonday = new Date(weekStartDate);
+        nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
         const { count, error: countError } = await supabaseAdmin
           .from("uploads")
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id)
           .eq("status", "active")
-          .gte("created_at", weekStart + "T00:00:00.000Z")
-          .lt("created_at", weekStart + "T23:59:59.999Z");
+          .gte("created_at", weekStartDate.toISOString())
+          .lt("created_at", nextMonday.toISOString());
 
         if (countError) {
           console.error(`Error counting sessions for user ${user.id}:`, countError);

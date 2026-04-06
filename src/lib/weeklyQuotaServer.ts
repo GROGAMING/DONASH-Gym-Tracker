@@ -61,14 +61,17 @@ export async function calcWeeklySessions(
   endOfWeek?: string
 ): Promise<number> {
   try {
-    const weekEnd = endOfWeek || startOfWeek + "T23:59:59.999Z";
-    
+    const weekStartDate = new Date(startOfWeek + "T00:00:00.000Z");
+    const nextMonday = new Date(weekStartDate);
+    nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
+    const weekEnd = endOfWeek || nextMonday.toISOString();
+
     const { count, error } = await supabaseAdmin
       .from("uploads")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .eq("status", "active")
-      .gte("created_at", startOfWeek + "T00:00:00.000Z")
+      .gte("created_at", weekStartDate.toISOString())
       .lt("created_at", weekEnd);
 
     if (error) {
