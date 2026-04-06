@@ -30,6 +30,8 @@ DROP FUNCTION IF EXISTS public.get_leaderboard_overall(text);
 -- ── Weekly leaderboard ───────────────────────────────────────────────────────
 -- Returns one row per user with the count of active uploads in the
 -- Monday–Sunday week identified by p_week_start (e.g. '2026-03-30').
+-- SECURITY DEFINER: runs as function owner (postgres), bypasses RLS on
+-- uploads and users so the anon client gets the same data as service role.
 CREATE OR REPLACE FUNCTION public.get_leaderboard_week(
   p_week_start text,
   p_team_id    text DEFAULT NULL
@@ -37,6 +39,8 @@ CREATE OR REPLACE FUNCTION public.get_leaderboard_week(
 RETURNS TABLE(name text, count bigint)
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $$
   SELECT
     u.name,
@@ -53,12 +57,15 @@ $$;
 
 -- ── Overall leaderboard ──────────────────────────────────────────────────────
 -- Returns one row per user with their all-time active upload count.
+-- SECURITY DEFINER: same reason as above.
 CREATE OR REPLACE FUNCTION public.get_leaderboard_overall(
   p_team_id text DEFAULT NULL
 )
 RETURNS TABLE(name text, count bigint)
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $$
   SELECT
     u.name,
