@@ -11,6 +11,8 @@ type AssignmentRow = {
   template_id: string;
   notes: string;
   created_at: string;
+  assignment_type: string;
+  assigned_user_ids: string[] | null;
 };
 
 type TemplateRow = {
@@ -38,7 +40,7 @@ export async function GET(_req: NextRequest) {
   // Rows persist until admin hard-deletes them.
   const { data: rows, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
-    .select("id, week_start, template_id, notes, created_at")
+    .select("id, week_start, template_id, notes, created_at, assignment_type, assigned_user_ids")
     .eq("team_id", TEAM_ID)
     .order("created_at", { ascending: false });
 
@@ -87,6 +89,8 @@ export async function GET(_req: NextRequest) {
         template_id: a.template_id,
         notes: a.notes ?? "",
         created_at: a.created_at,
+        assignment_type: a.assignment_type ?? "all",
+        assigned_user_ids: a.assigned_user_ids ?? null,
         template: t
           ? {
               id: t.id,
@@ -109,12 +113,24 @@ export async function POST(req: Request) {
   if (!isAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as
-    | { templateId?: unknown }
+    | { templateId?: unknown; weekStart?: unknown; assignmentType?: unknown; assignedUserIds?: unknown }
     | null;
 
   const templateId = typeof body?.templateId === "string" ? body.templateId : "";
 
   if (!templateId) return NextResponse.json({ error: "Missing templateId" }, { status: 400 });
+
+  const assignmentType =
+    body?.assignmentType === "selected" ? "selected" : "all";
+  const rawIds = Array.isArray(body?.assignedUserIds) ? body.assignedUserIds : [];
+  const assignedUserIds: string[] | null =
+    assignmentType === "selected" && rawIds.length > 0
+      ? rawIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : null;
+
+  if (assignmentType === "selected" && (!assignedUserIds || assignedUserIds.length === 0)) {
+    return NextResponse.json({ error: "Select at least one team member." }, { status: 400 });
+  }
 
   const { data: template, error: tErr } = await supabaseAdmin
     .from("session_templates")
@@ -127,7 +143,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
   }
 
-  const weekStart = mondayWeekStartISO(new Date());
+  const weekStart =
+    typeof body?.weekStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.weekStart)
+      ? mondayWeekStartISO(new Date(body.weekStart + "T12:00:00"))
+      : mondayWeekStartISO(new Date());
 
   const { data: assignment, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
@@ -135,8 +154,10 @@ export async function POST(req: Request) {
       team_id: TEAM_ID,
       week_start: weekStart,
       template_id: templateId,
+      assignment_type: assignmentType,
+      assigned_user_ids: assignedUserIds,
     })
-    .select("id, week_start, template_id, notes, created_at")
+    .select("id, week_start, template_id, notes, created_at, assignment_type, assigned_user_ids")
     .single();
 
   if (aErr) {

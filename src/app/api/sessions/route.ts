@@ -14,6 +14,8 @@ type WeeklySessionRow = {
   template_id: string;
   notes: string | null;
   created_at: string;
+  assignment_type: string | null;
+  assigned_user_ids: string[] | null;
   session_templates?: { id?: string; title?: string } | null;
 };
 
@@ -31,11 +33,14 @@ type ExerciseRow = {
   rest_seconds: number | null;
 };
 
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
+
+  const { searchParams } = new URL(req.url);
+  const playerId = searchParams.get("playerId") ?? null;
 
   const weekStart = mondayWeekStartISO(new Date());
 
@@ -43,13 +48,24 @@ export async function GET() {
   //    These are the admin-assigned sessions and persist until removed.
   const { data: allRows, error: aErr } = await supabase
     .from("weekly_sessions")
-    .select("id, week_start, template_id, notes, created_at, session_templates(id, title)")
+    .select("id, week_start, template_id, notes, created_at, assignment_type, assigned_user_ids, session_templates(id, title)")
     .eq("team_id", TEAM_ID)
     .order("created_at", { ascending: false });
 
   if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 });
 
-  const allAssigned = (allRows ?? []) as WeeklySessionRow[];
+  const allFetched = (allRows ?? []) as WeeklySessionRow[];
+
+  // Filter by assignment: if assignment_type = 'selected', only show to listed players.
+  // Rows with assignment_type = 'all' (or null/missing for backwards compat) are shown to everyone.
+  const allAssigned = playerId
+    ? allFetched.filter((r) => {
+        const aType = r.assignment_type ?? "all";
+        if (aType === "all") return true;
+        return Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(playerId);
+      })
+    : allFetched.filter((r) => (r.assignment_type ?? "all") === "all");
+
   if (allAssigned.length === 0) {
     return NextResponse.json({ sessions: [] }, { headers: { "Cache-Control": "no-store" } });
   }
@@ -68,16 +84,27 @@ export async function GET() {
   if (missingTemplateIds.length > 0) {
     // Insert new weekly_sessions rows for the current week (one per missing template).
     // Use supabaseAdmin to bypass RLS since this is a server-side auto-create.
-    const insertRows = missingTemplateIds.map((tid) => ({
-      team_id: TEAM_ID,
-      template_id: tid,
-      week_start: weekStart,
-    }));
+    // Carry forward assignment_type and assigned_user_ids from the most recent row for each template
+    const latestByTemplate = new Map<string, WeeklySessionRow>();
+    for (const r of allAssigned) {
+      if (!latestByTemplate.has(r.template_id)) latestByTemplate.set(r.template_id, r);
+    }
+
+    const insertRows = missingTemplateIds.map((tid) => {
+      const src = latestByTemplate.get(tid);
+      return {
+        team_id: TEAM_ID,
+        template_id: tid,
+        week_start: weekStart,
+        assignment_type: src?.assignment_type ?? "all",
+        assigned_user_ids: src?.assigned_user_ids ?? null,
+      };
+    });
 
     const { data: inserted, error: iErr } = await supabaseAdmin
       .from("weekly_sessions")
       .insert(insertRows)
-      .select("id, week_start, template_id, notes, created_at, session_templates(id, title)");
+      .select("id, week_start, template_id, notes, created_at, assignment_type, assigned_user_ids, session_templates(id, title)");
 
     if (iErr) return NextResponse.json({ error: iErr.message }, { status: 500 });
 

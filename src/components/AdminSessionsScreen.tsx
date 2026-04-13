@@ -206,12 +206,16 @@ type AssignmentItem = {
   template_id: string;
   notes: string;
   created_at: string;
+  assignment_type: string;
+  assigned_user_ids: string[] | null;
   template: null | {
     id: string;
     title: string;
     exercises: TemplateExercise[];
   };
 };
+
+type TeamMember = { id: string; name: string };
 
 type AssignmentResponse = {
   weekStart: string;
@@ -526,6 +530,72 @@ function BlockBuilder({
   );
 }
 
+// ─── Member picker sub-component ──────────────────────────────────────────
+function MemberPicker({
+  members,
+  selected,
+  onChange,
+  disabled,
+}: {
+  members: TeamMember[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  disabled: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const filtered = members.filter((m) =>
+    m.name.toLowerCase().includes(search.toLowerCase()),
+  );
+  const toggle = (id: string) =>
+    onChange(
+      selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id],
+    );
+  return (
+    <div className="mt-3 border border-border rounded-xl overflow-hidden">
+      <div className="px-3 py-2 border-b border-border bg-background">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search members…"
+          disabled={disabled}
+          className="w-full text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+        />
+      </div>
+      <div className="max-h-48 overflow-y-auto divide-y divide-border">
+        {filtered.length === 0 ? (
+          <p className="text-xs text-muted-foreground px-3 py-2">No members found.</p>
+        ) : (
+          filtered.map((m) => {
+            const checked = selected.includes(m.id);
+            return (
+              <label
+                key={m.id}
+                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-secondary transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(m.id)}
+                  disabled={disabled}
+                  className="w-4 h-4 rounded border-border accent-primary"
+                />
+                <span className="text-sm text-foreground">{m.name}</span>
+              </label>
+            );
+          })
+        )}
+      </div>
+      {selected.length > 0 && (
+        <div className="px-3 py-2 border-t border-border bg-secondary/40">
+          <p className="text-xs text-muted-foreground">
+            {selected.length} member{selected.length === 1 ? "" : "s"} selected
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ────────────────────────────────────────────────────────
 export default function AdminSessionsScreen({ teamName }: { teamName: string }) {
   const router = useRouter();
@@ -559,9 +629,29 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
   const [savingNotesId, setSavingNotesId] = useState<string | null>(null);
   const [notesMap, setNotesMap] = useState<Record<string, string>>({});
 
+  // ── Assignment targeting ──
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [newAssignmentType, setNewAssignmentType] = useState<"all" | "selected">("all");
+  const [newSelectedMemberIds, setNewSelectedMemberIds] = useState<string[]>([]);
+
+  // Per-assignment inline editing of assignment target
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
+  const [editAssignmentType, setEditAssignmentType] = useState<"all" | "selected">("all");
+  const [editAssignedIds, setEditAssignedIds] = useState<string[]>([]);
+  const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null);
+
   // ── Delete ──
   const [deleteTarget, setDeleteTarget] = useState<Template | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const fetchTeamMembers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/players");
+      if (!res.ok) return;
+      const data = (await res.json()) as TeamMember[];
+      setTeamMembers(Array.isArray(data) ? data : []);
+    } catch { /* non-fatal */ }
+  }, []);
 
   const fetchTemplates = useCallback(async () => {
     setLoadingTemplates(true);
@@ -608,6 +698,7 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
     }
   }, []);
 
+  useEffect(() => { void fetchTeamMembers(); }, [fetchTeamMembers]);
   useEffect(() => { void fetchTemplates(); }, [fetchTemplates]);
   useEffect(() => { void fetchAssignment(normalizedWeekStart); }, [fetchAssignment, normalizedWeekStart]);
 
@@ -737,13 +828,22 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
   const assignWeekly = useCallback(async () => {
     if (assigning) return;
     if (!selectedTemplateId) { setToast({ message: "Pick a template first.", type: "error" }); return; }
+    if (newAssignmentType === "selected" && newSelectedMemberIds.length === 0) {
+      setToast({ message: "Select at least one team member.", type: "error" });
+      return;
+    }
     setAssigning(true);
     setToast(null);
     try {
       const res = await fetch("/api/admin/weekly-session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ weekStart: normalizedWeekStart, templateId: selectedTemplateId }),
+        body: JSON.stringify({
+          weekStart: normalizedWeekStart,
+          templateId: selectedTemplateId,
+          assignmentType: newAssignmentType,
+          assignedUserIds: newAssignmentType === "selected" ? newSelectedMemberIds : [],
+        }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -751,13 +851,44 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
         return;
       }
       setToast({ message: "Weekly session assigned.", type: "success" });
+      setNewAssignmentType("all");
+      setNewSelectedMemberIds([]);
       await fetchAssignment(normalizedWeekStart);
     } catch {
       setToast({ message: "Failed to assign session.", type: "error" });
     } finally {
       setAssigning(false);
     }
-  }, [assigning, fetchAssignment, normalizedWeekStart, selectedTemplateId]);
+  }, [assigning, fetchAssignment, newAssignmentType, newSelectedMemberIds, normalizedWeekStart, selectedTemplateId]);
+
+  const saveAssignmentTarget = useCallback(async (assignmentId: string) => {
+    if (savingAssignmentId) return;
+    if (editAssignmentType === "selected" && editAssignedIds.length === 0) {
+      setToast({ message: "Select at least one team member.", type: "error" });
+      return;
+    }
+    setSavingAssignmentId(assignmentId);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/admin/weekly-session/${encodeURIComponent(assignmentId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          assignmentType: editAssignmentType,
+          assignedUserIds: editAssignmentType === "selected" ? editAssignedIds : [],
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) { setToast({ message: body?.error || "Failed to update assignment.", type: "error" }); return; }
+      setToast({ message: "Assignment updated.", type: "success" });
+      setEditingAssignmentId(null);
+      await fetchAssignment(normalizedWeekStart);
+    } catch {
+      setToast({ message: "Failed to update assignment.", type: "error" });
+    } finally {
+      setSavingAssignmentId(null);
+    }
+  }, [editAssignedIds, editAssignmentType, fetchAssignment, normalizedWeekStart, savingAssignmentId]);
 
   return (
     <AppShell teamName={teamName}>
@@ -927,6 +1058,44 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
             </select>
           </div>
 
+          <div className="mt-4">
+            <label className="block text-xs font-semibold text-muted-foreground mb-2">Assign to</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setNewAssignmentType("all")}
+                disabled={assigning}
+                className={`flex-1 px-3 py-2.5 rounded-xl border text-sm font-semibold transition-colors ${
+                  newAssignmentType === "all"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-foreground hover:bg-secondary"
+                }`}
+              >
+                All team members
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewAssignmentType("selected")}
+                disabled={assigning}
+                className={`flex-1 px-3 py-2.5 rounded-xl border text-sm font-semibold transition-colors ${
+                  newAssignmentType === "selected"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-foreground hover:bg-secondary"
+                }`}
+              >
+                Selected members
+              </button>
+            </div>
+            {newAssignmentType === "selected" && (
+              <MemberPicker
+                members={teamMembers}
+                selected={newSelectedMemberIds}
+                onChange={setNewSelectedMemberIds}
+                disabled={assigning}
+              />
+            )}
+          </div>
+
           <div className="mt-5">
             <PrimaryButton type="button" onClick={() => void assignWeekly()} disabled={assigning} loading={assigning}>
               Assign
@@ -942,36 +1111,121 @@ export default function AdminSessionsScreen({ teamName }: { teamName: string }) 
               <p className="text-sm text-muted-foreground">No sessions assigned for this week.</p>
             ) : (
               <div className="space-y-3">
-                {assignment.assignments.map((a) => (
-                  <div key={a.id} className="border border-border rounded-2xl p-4 bg-background">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
-                        <p className="text-xs text-muted-foreground">Week starting {a.week_start}</p>
+                {assignment.assignments.map((a) => {
+                  const aType = a.assignment_type ?? "all";
+                  const assignedNames = aType === "selected" && Array.isArray(a.assigned_user_ids)
+                    ? a.assigned_user_ids
+                        .map((uid) => teamMembers.find((m) => m.id === uid)?.name ?? uid)
+                        .join(", ")
+                    : null;
+                  const isEditingTarget = editingAssignmentId === a.id;
+                  return (
+                    <div key={a.id} className="border border-border rounded-2xl p-4 bg-background">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{a.template?.title ?? "Unknown template"}</p>
+                          <p className="text-xs text-muted-foreground">Week starting {a.week_start}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {aType === "all" ? "Assigned to all members" : `Assigned to: ${assignedNames ?? "selected members"}`}
+                          </p>
+                        </div>
+                        <button type="button" onClick={() => void removeAssignment(a.id)} disabled={removingId === a.id}
+                          className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50">
+                          <Trash2 className="w-3.5 h-3.5" />
+                          {removingId === a.id ? "Removing…" : "Remove"}
+                        </button>
                       </div>
-                      <button type="button" onClick={() => void removeAssignment(a.id)} disabled={removingId === a.id}
-                        className="shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50">
-                        <Trash2 className="w-3.5 h-3.5" />
-                        {removingId === a.id ? "Removing…" : "Remove"}
-                      </button>
-                    </div>
-                    <div className="mt-3">
-                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Notes</label>
-                      <textarea
-                        value={notesMap[a.id] ?? ""}
-                        onChange={(e) => setNotesMap((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                        placeholder="Add a note visible to players…"
-                        rows={2}
-                        className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none resize-none"
-                      />
-                      <div className="mt-1.5">
-                        <SecondaryButton type="button" onClick={() => void saveNotes(a.id)} disabled={savingNotesId === a.id}>
-                          {savingNotesId === a.id ? "Saving…" : "Save notes"}
-                        </SecondaryButton>
+
+                      {/* Assignment target edit */}
+                      {isEditingTarget ? (
+                        <div className="mt-3 pt-3 border-t border-border">
+                          <p className="text-xs font-semibold text-muted-foreground mb-2">Change assignment</p>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditAssignmentType("all")}
+                              disabled={!!savingAssignmentId}
+                              className={`flex-1 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
+                                editAssignmentType === "all"
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border bg-background text-foreground hover:bg-secondary"
+                              }`}
+                            >
+                              All members
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditAssignmentType("selected")}
+                              disabled={!!savingAssignmentId}
+                              className={`flex-1 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
+                                editAssignmentType === "selected"
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border bg-background text-foreground hover:bg-secondary"
+                              }`}
+                            >
+                              Selected
+                            </button>
+                          </div>
+                          {editAssignmentType === "selected" && (
+                            <MemberPicker
+                              members={teamMembers}
+                              selected={editAssignedIds}
+                              onChange={setEditAssignedIds}
+                              disabled={!!savingAssignmentId}
+                            />
+                          )}
+                          <div className="mt-2.5 flex gap-2">
+                            <SecondaryButton
+                              type="button"
+                              onClick={() => setEditingAssignmentId(null)}
+                              disabled={!!savingAssignmentId}
+                            >
+                              Cancel
+                            </SecondaryButton>
+                            <PrimaryButton
+                              type="button"
+                              onClick={() => void saveAssignmentTarget(a.id)}
+                              disabled={!!savingAssignmentId}
+                              loading={savingAssignmentId === a.id}
+                            >
+                              Save
+                            </PrimaryButton>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingAssignmentId(a.id);
+                              setEditAssignmentType((a.assignment_type ?? "all") as "all" | "selected");
+                              setEditAssignedIds(a.assigned_user_ids ?? []);
+                            }}
+                            className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Edit assignment
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1">Notes</label>
+                        <textarea
+                          value={notesMap[a.id] ?? ""}
+                          onChange={(e) => setNotesMap((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                          placeholder="Add a note visible to players…"
+                          rows={2}
+                          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm outline-none resize-none"
+                        />
+                        <div className="mt-1.5">
+                          <SecondaryButton type="button" onClick={() => void saveNotes(a.id)} disabled={savingNotesId === a.id}>
+                            {savingNotesId === a.id ? "Saving…" : "Save notes"}
+                          </SecondaryButton>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
