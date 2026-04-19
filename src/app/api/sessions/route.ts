@@ -153,7 +153,7 @@ export async function GET(req: Request) {
       // Join key is template_id + week_start — copy inserts use the NEW week_start.
       const selectedNew = newRows.filter((r) => (r.assignment_type ?? "all") === "selected");
       if (selectedNew.length > 0) {
-        const copyInserts: { template_id: string; week_start: string; user_id: string }[] = [];
+        const copyInserts: { team_id: string; template_id: string; week_start: string; user_id: string }[] = [];
         for (const newRow of selectedNew) {
           const srcRow = latestByTemplate.get(newRow.template_id);
           if (srcRow) {
@@ -161,6 +161,7 @@ export async function GET(req: Request) {
             const srcUserIds = assignedUsersByKey[srcKey] ?? [];
             for (const uid of srcUserIds) {
               copyInserts.push({
+                team_id: TEAM_ID!,
                 template_id: newRow.template_id,
                 week_start: newRow.week_start,
                 user_id: uid,

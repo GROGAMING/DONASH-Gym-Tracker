@@ -218,6 +218,7 @@ export async function POST(req: Request) {
       .from("assigned_sessions")
       .insert(
         assignedUserIds.map((uid) => ({
+          team_id: TEAM_ID,
           template_id: templateId,
           week_start: newWeekStart,
           user_id: uid,

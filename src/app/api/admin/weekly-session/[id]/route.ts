@@ -102,6 +102,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         .from("assigned_sessions")
         .insert(
           assignedUserIds.map((uid) => ({
+            team_id: TEAM_ID,
             template_id: templateId,
             week_start: weekStart,
             user_id: uid,
