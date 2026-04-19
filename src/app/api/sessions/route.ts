@@ -15,7 +15,6 @@ type WeeklySessionRow = {
   notes: string | null;
   created_at: string;
   assignment_type: string | null;
-  assigned_user_ids: string[] | null;
   session_templates?: { id?: string; title?: string } | null;
 };
 
@@ -48,7 +47,7 @@ export async function GET(req: Request) {
   //    These are the admin-assigned sessions and persist until removed.
   const { data: allRows, error: aErr } = await supabase
     .from("weekly_sessions")
-    .select("id, week_start, template_id, notes, created_at, assignment_type, assigned_user_ids, session_templates(id, title)")
+    .select("id, week_start, template_id, notes, created_at, assignment_type, session_templates(id, title)")
     .eq("team_id", TEAM_ID)
     .order("created_at", { ascending: false });
 
@@ -56,15 +55,39 @@ export async function GET(req: Request) {
 
   const allFetched = (allRows ?? []) as WeeklySessionRow[];
 
-  // Filter by assignment: if assignment_type = 'selected', only show to listed players.
-  // Rows with assignment_type = 'all' (or null/missing for backwards compat) are shown to everyone.
-  const allAssigned = playerId
-    ? allFetched.filter((r) => {
-        const aType = r.assignment_type ?? "all";
-        if (aType === "all") return true;
-        return Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(playerId);
-      })
-    : allFetched.filter((r) => (r.assignment_type ?? "all") === "all");
+  // Separate sessions by type so we can resolve 'selected' visibility via assigned_sessions.
+  const allSessions = allFetched;
+  const selectedTypeSessions = allSessions.filter((r) => (r.assignment_type ?? "all") === "selected");
+
+  // For 'selected' sessions, fetch which users are assigned via the join table.
+  // We use supabaseAdmin here so RLS doesn't block the server-side read.
+  let assignedSessionUserIds: Record<string, string[]> = {};
+  if (selectedTypeSessions.length > 0) {
+    const selectedIds = selectedTypeSessions.map((r) => r.id);
+    const { data: asRows, error: asErr } = await supabaseAdmin
+      .from("assigned_sessions")
+      .select("weekly_session_id, user_id")
+      .in("weekly_session_id", selectedIds);
+    if (asErr) return NextResponse.json({ error: asErr.message }, { status: 500 });
+    assignedSessionUserIds = ((asRows ?? []) as { weekly_session_id: string; user_id: string }[]).reduce<
+      Record<string, string[]>
+    >((acc, r) => {
+      acc[r.weekly_session_id] = acc[r.weekly_session_id] ?? [];
+      acc[r.weekly_session_id].push(r.user_id);
+      return acc;
+    }, {});
+  }
+
+  // Filter by assignment:
+  //   'all'      → visible to everyone (or when no playerId provided)
+  //   'selected' → visible only if playerId is in assigned_sessions for this session
+  const allAssigned = allSessions.filter((r) => {
+    const aType = r.assignment_type ?? "all";
+    if (aType === "all") return true;
+    if (!playerId) return false; // no player context → hide 'selected' sessions
+    const allowed = assignedSessionUserIds[r.id] ?? [];
+    return allowed.includes(playerId);
+  });
 
   if (allAssigned.length === 0) {
     return NextResponse.json({ sessions: [] }, { headers: { "Cache-Control": "no-store" } });
@@ -97,20 +120,36 @@ export async function GET(req: Request) {
         template_id: tid,
         week_start: weekStart,
         assignment_type: src?.assignment_type ?? "all",
-        assigned_user_ids: src?.assigned_user_ids ?? null,
       };
     });
 
     const { data: inserted, error: iErr } = await supabaseAdmin
       .from("weekly_sessions")
       .insert(insertRows)
-      .select("id, week_start, template_id, notes, created_at, assignment_type, assigned_user_ids, session_templates(id, title)");
+      .select("id, week_start, template_id, notes, created_at, assignment_type, session_templates(id, title)");
 
     if (iErr) return NextResponse.json({ error: iErr.message }, { status: 500 });
 
-    // Merge newly inserted rows into our current-week set
+    // For any auto-created 'selected' sessions, copy the assigned_sessions rows from the source
     if (inserted) {
-      currentWeekRows.push(...(inserted as WeeklySessionRow[]));
+      const newRows = inserted as WeeklySessionRow[];
+      const selectedNew = newRows.filter((r) => (r.assignment_type ?? "all") === "selected");
+      if (selectedNew.length > 0) {
+        const copyInserts: { weekly_session_id: string; user_id: string }[] = [];
+        for (const newRow of selectedNew) {
+          const srcRow = latestByTemplate.get(newRow.template_id);
+          if (srcRow) {
+            const srcUserIds = assignedSessionUserIds[srcRow.id] ?? [];
+            for (const uid of srcUserIds) {
+              copyInserts.push({ weekly_session_id: newRow.id, user_id: uid });
+            }
+          }
+        }
+        if (copyInserts.length > 0) {
+          await supabaseAdmin.from("assigned_sessions").insert(copyInserts);
+        }
+      }
+      currentWeekRows.push(...newRows);
     }
   }
 
