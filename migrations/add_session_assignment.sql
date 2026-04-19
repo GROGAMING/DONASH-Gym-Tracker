@@ -1,33 +1,23 @@
--- Migration: Session targeting — assign sessions to all or selected users
+-- Migration: Session targeting — store assignment data directly on weekly_sessions.
 -- Safe to re-run (idempotent).
 --
--- Real confirmed schema (from Supabase screenshots):
---   weekly_sessions : id, team_id, template_id, week_start, session_date, notes, created_at
---   assigned_sessions : id, template_id, week_start, created_at  (+ team_id assumed)
---   users : id, name, team_id
+-- Design decision:
+--   assigned_sessions is not used by the app and has FK constraints that make it
+--   unsuitable as a join table without schema redesign. Instead, store assignment
+--   data directly on weekly_sessions:
 --
--- Minimum additions required:
---   1. weekly_sessions.assignment_type  text DEFAULT 'all'
---        Controls whether this session row is for all users or selected users only.
---   2. assigned_sessions.user_id  uuid DEFAULT NULL
---        NULL  = the existing behaviour (whole team assigned via this row)
---        uuid  = only that specific user is assigned
+--   weekly_sessions.assignment_type   text     DEFAULT 'all'  — 'all' | 'selected'
+--   weekly_sessions.assigned_user_ids uuid[]   DEFAULT NULL   — populated when type = 'selected'
 --
 -- Backwards compatibility:
---   All existing weekly_sessions rows get assignment_type = 'all' (default).
---   All existing assigned_sessions rows keep user_id = NULL — unchanged behaviour.
---
--- Cleanup: remove any columns added by earlier bad migration attempts.
+--   All existing weekly_sessions rows get assignment_type = 'all' by default,
+--   so they remain visible to every team member with no data changes required.
 
--- 1. Remove incorrect columns added by previous bad migrations (safe if not present)
-ALTER TABLE public.weekly_sessions
-  DROP COLUMN IF EXISTS assigned_user_ids;
-
--- 2. Add assignment_type to weekly_sessions
+-- 1. Add assignment_type (idempotent)
 ALTER TABLE public.weekly_sessions
   ADD COLUMN IF NOT EXISTS assignment_type text NOT NULL DEFAULT 'all';
 
--- 3. Constrain assignment_type values (drop first so re-runs are safe)
+-- 2. Constrain to the two valid values (drop+recreate so re-runs are safe)
 ALTER TABLE public.weekly_sessions
   DROP CONSTRAINT IF EXISTS weekly_sessions_assignment_type_check;
 
@@ -35,16 +25,11 @@ ALTER TABLE public.weekly_sessions
   ADD CONSTRAINT weekly_sessions_assignment_type_check
     CHECK (assignment_type IN ('all', 'selected'));
 
--- 4. Backfill existing rows to 'all'
+-- 3. Add assigned_user_ids uuid array (idempotent)
+ALTER TABLE public.weekly_sessions
+  ADD COLUMN IF NOT EXISTS assigned_user_ids uuid[] DEFAULT NULL;
+
+-- 4. Backfill: ensure no nulls on assignment_type for existing rows
 UPDATE public.weekly_sessions
   SET assignment_type = 'all'
   WHERE assignment_type IS NULL;
-
--- 5. Add user_id to assigned_sessions (nullable — NULL means whole team)
-ALTER TABLE public.assigned_sessions
-  ADD COLUMN IF NOT EXISTS user_id uuid DEFAULT NULL;
-
--- 6. Index for fast per-user lookups
-CREATE INDEX IF NOT EXISTS assigned_sessions_user_idx
-  ON public.assigned_sessions(user_id)
-  WHERE user_id IS NOT NULL;

@@ -12,15 +12,7 @@ type AssignmentRow = {
   notes: string;
   created_at: string;
   assignment_type: string;
-};
-
-// assigned_sessions real columns (confirmed from Supabase):
-//   id, template_id, week_start, created_at, user_id (added by migration)
-// Joins to weekly_sessions via template_id + week_start (NOT weekly_session_id)
-type AssignedSessionRow = {
-  template_id: string;
-  week_start: string;
-  user_id: string | null;
+  assigned_user_ids: string[] | null;
 };
 
 type TemplateRow = {
@@ -48,7 +40,7 @@ export async function GET(_req: NextRequest) {
   // Rows persist until admin hard-deletes them.
   const { data: rows, error: aErr } = await supabaseAdmin
     .from("weekly_sessions")
-    .select("id, week_start, template_id, notes, created_at, assignment_type")
+    .select("id, week_start, template_id, notes, created_at, assignment_type, assigned_user_ids")
     .eq("team_id", TEAM_ID)
     .order("created_at", { ascending: false });
 
@@ -63,31 +55,6 @@ export async function GET(_req: NextRequest) {
   }
 
   const templateIds = Array.from(new Set(assignments.map((a) => a.template_id)));
-
-  // Fetch per-user assignments from assigned_sessions.
-  // Join key is template_id + week_start (NOT weekly_session_id — that column doesn't exist).
-  // Only rows with user_id IS NOT NULL are per-user rows.
-  const { data: asRows, error: asErr } = await supabaseAdmin
-    .from("assigned_sessions")
-    .select("template_id, week_start, user_id")
-    .in("template_id", templateIds.length > 0 ? templateIds : ["00000000-0000-0000-0000-000000000000"])
-    .not("user_id", "is", null);
-
-  if (asErr) {
-    return NextResponse.json({ error: asErr.message, code: asErr.code }, { status: 500 });
-  }
-
-  // Build map: `${template_id}|${week_start}` -> user_id[]
-  const assignedUsersMap = ((asRows ?? []) as AssignedSessionRow[]).reduce<Record<string, string[]>>(
-    (acc, r) => {
-      if (!r.user_id) return acc;
-      const key = `${r.template_id}|${r.week_start}`;
-      acc[key] = acc[key] ?? [];
-      acc[key].push(r.user_id);
-      return acc;
-    },
-    {},
-  );
 
   const [{ data: templates, error: tErr }, { data: exRows, error: exErr }] = await Promise.all([
     supabaseAdmin
@@ -116,7 +83,6 @@ export async function GET(_req: NextRequest) {
   return NextResponse.json({
     assignments: assignments.map((a) => {
       const t = templateMap.get(a.template_id) ?? null;
-      const key = `${a.template_id}|${a.week_start}`;
       return {
         id: a.id,
         week_start: a.week_start,
@@ -124,7 +90,7 @@ export async function GET(_req: NextRequest) {
         notes: a.notes ?? "",
         created_at: a.created_at,
         assignment_type: a.assignment_type ?? "all",
-        assigned_user_ids: assignedUsersMap[key] ?? [],
+        assigned_user_ids: a.assigned_user_ids ?? [],
         template: t
           ? {
               id: t.id,
@@ -174,21 +140,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
   }
 
-  // Validate selected user IDs exist in users table for this team
-  if (assignmentType === "selected" && assignedUserIds.length > 0) {
-    const { data: userCheck, error: ucErr } = await supabaseAdmin
-      .from("users")
-      .select("id")
-      .eq("team_id", TEAM_ID)
-      .in("id", assignedUserIds);
-    if (ucErr) return NextResponse.json({ error: ucErr.message }, { status: 500 });
-    const validIds = new Set((userCheck ?? []).map((r: { id: string }) => r.id));
-    const invalid = assignedUserIds.filter((id) => !validIds.has(id));
-    if (invalid.length > 0) {
-      return NextResponse.json({ error: "One or more selected players are not on this team." }, { status: 400 });
-    }
-  }
-
   const weekStart =
     typeof body?.weekStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.weekStart)
       ? mondayWeekStartISO(new Date(body.weekStart + "T12:00:00"))
@@ -201,35 +152,14 @@ export async function POST(req: Request) {
       week_start: weekStart,
       template_id: templateId,
       assignment_type: assignmentType,
+      assigned_user_ids: assignmentType === "selected" ? assignedUserIds : null,
     })
-    .select("id, week_start, template_id, notes, created_at, assignment_type")
+    .select("id, week_start, template_id, notes, created_at, assignment_type, assigned_user_ids")
     .single();
 
   if (aErr) {
     return NextResponse.json({ error: aErr.message, code: aErr.code }, { status: 500 });
   }
 
-  const newWeekStart = (assignment as { week_start: string }).week_start;
-
-  // Write per-user rows into assigned_sessions when type = 'selected'.
-  // Join key is template_id + week_start (real schema — no weekly_session_id column).
-  if (assignmentType === "selected" && assignedUserIds.length > 0) {
-    const { error: asErr } = await supabaseAdmin
-      .from("assigned_sessions")
-      .insert(
-        assignedUserIds.map((uid) => ({
-          team_id: TEAM_ID,
-          template_id: templateId,
-          week_start: newWeekStart,
-          user_id: uid,
-        })),
-      );
-    if (asErr) {
-      // Roll back the weekly_sessions row so we don't leave orphaned data
-      await supabaseAdmin.from("weekly_sessions").delete().eq("id", (assignment as { id: string }).id);
-      return NextResponse.json({ error: asErr.message, code: asErr.code }, { status: 500 });
-    }
-  }
-
-  return NextResponse.json({ ok: true, assignment: { ...assignment, assigned_user_ids: assignedUserIds } });
+  return NextResponse.json({ ok: true, assignment });
 }
