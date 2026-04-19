@@ -191,8 +191,8 @@ export async function GET(req: NextRequest) {
 
       const totalVolume = withWeight.reduce((sum, s) => sum + s.weight! * s.reps!, 0);
 
-      // Last 10 sets (already ordered by created_at desc)
-      const last10 = sets.slice(0, 10).map((s) => ({
+      // All sets ordered by created_at desc (most recent first)
+      const allSets = sets.map((s) => ({
         id: s.id,
         set_number: s.set_number,
         reps: s.reps,
@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
         bestSet: bestSet
           ? { reps: bestSet.reps, weight: bestSet.weight, created_at: bestSet.created_at }
           : null,
-        last10,
+        allSets,
       };
     });
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, ChevronRight, History, AlertCircle } from "lucide-react";
+import { useSelectedPlayer } from "@/lib/useSelectedPlayer";
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
@@ -51,6 +52,8 @@ function SkeletonCard() {
 
 export default function PlayerSessionsListScreen({ teamName }: { teamName: string }) {
   const router = useRouter();
+  const { player } = useSelectedPlayer();
+  const playerId = player?.playerId ?? null;
 
   const [toast, setToast] = useState<ToastState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,7 +65,10 @@ export default function PlayerSessionsListScreen({ teamName }: { teamName: strin
     setError(null);
 
     try {
-      const res = await fetch("/api/sessions");
+      const url = playerId
+        ? `/api/sessions?playerId=${encodeURIComponent(playerId)}`
+        : "/api/sessions";
+      const res = await fetch(url);
       const body = (await res.json().catch(() => null)) as ApiResponse | null;
 
       if (!res.ok) {
@@ -78,7 +84,7 @@ export default function PlayerSessionsListScreen({ teamName }: { teamName: strin
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [playerId]);
 
   useEffect(() => {
     void load();
