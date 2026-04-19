@@ -80,7 +80,7 @@ export default function SessionsScreen({ teamName }: { teamName: string }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [playerId]);
 
   useEffect(() => {
     void load();

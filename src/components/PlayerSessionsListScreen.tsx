@@ -84,7 +84,7 @@ export default function PlayerSessionsListScreen({ teamName }: { teamName: strin
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [playerId]);
 
   useEffect(() => {
     void load();
