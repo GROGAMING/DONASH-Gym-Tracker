@@ -40,19 +40,39 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const patch: Record<string, unknown> = { notes };
   let assignedUserIds: string[] = [];
   let updatingAssignment = false;
+  let newAssignmentType = "all";
 
   if (body?.assignmentType !== undefined) {
     updatingAssignment = true;
-    const assignmentType = body.assignmentType === "selected" ? "selected" : "all";
+    newAssignmentType = body.assignmentType === "selected" ? "selected" : "all";
     const rawIds = Array.isArray(body.assignedUserIds) ? body.assignedUserIds : [];
     assignedUserIds = rawIds.filter((x): x is string => typeof x === "string" && x.length > 0);
 
-    if (assignmentType === "selected" && assignedUserIds.length === 0) {
+    if (newAssignmentType === "selected" && assignedUserIds.length === 0) {
       return NextResponse.json({ error: "Select at least one team member." }, { status: 400 });
     }
 
-    patch.assignment_type = assignmentType;
+    patch.assignment_type = newAssignmentType;
   }
+
+  // Fetch the current weekly_session row so we know template_id + week_start
+  // (assigned_sessions joins via those columns, not weekly_session_id)
+  const { data: currentSession, error: csErr } = await supabaseAdmin
+    .from("weekly_sessions")
+    .select("id, template_id, week_start")
+    .eq("id", id)
+    .eq("team_id", TEAM_ID)
+    .single();
+
+  if (csErr || !currentSession) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  const { template_id: templateId, week_start: weekStart } = currentSession as {
+    id: string;
+    template_id: string;
+    week_start: string;
+  };
 
   const { data, error } = await supabaseAdmin
     .from("weekly_sessions")
@@ -64,31 +84,40 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Sync assigned_sessions rows when assignment target is being updated
+  // Sync assigned_sessions rows when assignment target is being updated.
+  // Join key is template_id + week_start — NOT weekly_session_id (column doesn't exist).
   if (updatingAssignment) {
-    const assignmentType = patch.assignment_type as string;
-
-    // Delete all existing per-player assignments for this session first
+    // Delete existing per-user rows for this template+week
     const { error: delErr } = await supabaseAdmin
       .from("assigned_sessions")
       .delete()
-      .eq("weekly_session_id", id);
+      .eq("template_id", templateId)
+      .eq("week_start", weekStart)
+      .not("user_id", "is", null);
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
 
-    // Insert new per-player rows when type = 'selected'
-    if (assignmentType === "selected" && assignedUserIds.length > 0) {
+    // Insert new per-user rows when type = 'selected'
+    if (newAssignmentType === "selected" && assignedUserIds.length > 0) {
       const { error: insErr } = await supabaseAdmin
         .from("assigned_sessions")
-        .insert(assignedUserIds.map((uid) => ({ weekly_session_id: id, user_id: uid })));
+        .insert(
+          assignedUserIds.map((uid) => ({
+            template_id: templateId,
+            week_start: weekStart,
+            user_id: uid,
+          })),
+        );
       if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
     }
   }
 
-  // Re-fetch the current assigned_user_ids to return consistent shape
+  // Re-fetch current assigned user IDs for consistent response shape
   const { data: asRows } = await supabaseAdmin
     .from("assigned_sessions")
     .select("user_id")
-    .eq("weekly_session_id", id);
+    .eq("template_id", templateId)
+    .eq("week_start", weekStart)
+    .not("user_id", "is", null);
 
   const currentAssignedIds = (asRows ?? []).map((r: { user_id: string }) => r.user_id);
 

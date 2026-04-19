@@ -8,6 +8,10 @@ import { mondayWeekStartISO } from "@/lib/week";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// Real confirmed columns from Supabase:
+//   weekly_sessions: id, team_id, template_id, week_start, session_date, notes, created_at, assignment_type
+//   assigned_sessions: id, template_id, week_start, created_at, user_id (added by migration)
+//   Join key: assigned_sessions.template_id + assigned_sessions.week_start
 type WeeklySessionRow = {
   id: string;
   week_start: string;
@@ -16,6 +20,12 @@ type WeeklySessionRow = {
   created_at: string;
   assignment_type: string | null;
   session_templates?: { id?: string; title?: string } | null;
+};
+
+type AssignedSessionRow = {
+  template_id: string;
+  week_start: string;
+  user_id: string | null;
 };
 
 type ExerciseRow = {
@@ -55,38 +65,44 @@ export async function GET(req: Request) {
 
   const allFetched = (allRows ?? []) as WeeklySessionRow[];
 
-  // Separate sessions by type so we can resolve 'selected' visibility via assigned_sessions.
   const allSessions = allFetched;
+
+  // For 'selected' sessions, look up who is assigned via assigned_sessions.
+  // Real join key: template_id + week_start  (assigned_sessions has NO weekly_session_id column).
+  // user_id IS NOT NULL means it is a per-user row; user_id IS NULL = whole-team row (legacy).
   const selectedTypeSessions = allSessions.filter((r) => (r.assignment_type ?? "all") === "selected");
 
-  // For 'selected' sessions, fetch which users are assigned via the join table.
-  // We use supabaseAdmin here so RLS doesn't block the server-side read.
-  let assignedSessionUserIds: Record<string, string[]> = {};
+  // Map: `${template_id}|${week_start}` -> user_id[]
+  let assignedUsersByKey: Record<string, string[]> = {};
   if (selectedTypeSessions.length > 0) {
-    const selectedIds = selectedTypeSessions.map((r) => r.id);
+    const templateIds = [...new Set(selectedTypeSessions.map((r) => r.template_id))];
     const { data: asRows, error: asErr } = await supabaseAdmin
       .from("assigned_sessions")
-      .select("weekly_session_id, user_id")
-      .in("weekly_session_id", selectedIds);
+      .select("template_id, week_start, user_id")
+      .in("template_id", templateIds)
+      .not("user_id", "is", null);
     if (asErr) return NextResponse.json({ error: asErr.message }, { status: 500 });
-    assignedSessionUserIds = ((asRows ?? []) as { weekly_session_id: string; user_id: string }[]).reduce<
-      Record<string, string[]>
-    >((acc, r) => {
-      acc[r.weekly_session_id] = acc[r.weekly_session_id] ?? [];
-      acc[r.weekly_session_id].push(r.user_id);
-      return acc;
-    }, {});
+    assignedUsersByKey = ((asRows ?? []) as AssignedSessionRow[]).reduce<Record<string, string[]>>(
+      (acc, r) => {
+        if (!r.user_id) return acc;
+        const key = `${r.template_id}|${r.week_start}`;
+        acc[key] = acc[key] ?? [];
+        acc[key].push(r.user_id);
+        return acc;
+      },
+      {},
+    );
   }
 
-  // Filter by assignment:
-  //   'all'      → visible to everyone (or when no playerId provided)
-  //   'selected' → visible only if playerId is in assigned_sessions for this session
+  // Filter sessions by assignment:
+  //   'all'      → visible to everyone
+  //   'selected' → only if playerId appears in assigned_sessions for this template+week
   const allAssigned = allSessions.filter((r) => {
     const aType = r.assignment_type ?? "all";
     if (aType === "all") return true;
-    if (!playerId) return false; // no player context → hide 'selected' sessions
-    const allowed = assignedSessionUserIds[r.id] ?? [];
-    return allowed.includes(playerId);
+    if (!playerId) return false;
+    const key = `${r.template_id}|${r.week_start}`;
+    return (assignedUsersByKey[key] ?? []).includes(playerId);
   });
 
   if (allAssigned.length === 0) {
@@ -130,18 +146,25 @@ export async function GET(req: Request) {
 
     if (iErr) return NextResponse.json({ error: iErr.message }, { status: 500 });
 
-    // For any auto-created 'selected' sessions, copy the assigned_sessions rows from the source
     if (inserted) {
       const newRows = inserted as WeeklySessionRow[];
+
+      // For auto-created 'selected' rows, copy assigned_sessions from the source week.
+      // Join key is template_id + week_start — copy inserts use the NEW week_start.
       const selectedNew = newRows.filter((r) => (r.assignment_type ?? "all") === "selected");
       if (selectedNew.length > 0) {
-        const copyInserts: { weekly_session_id: string; user_id: string }[] = [];
+        const copyInserts: { template_id: string; week_start: string; user_id: string }[] = [];
         for (const newRow of selectedNew) {
           const srcRow = latestByTemplate.get(newRow.template_id);
           if (srcRow) {
-            const srcUserIds = assignedSessionUserIds[srcRow.id] ?? [];
+            const srcKey = `${srcRow.template_id}|${srcRow.week_start}`;
+            const srcUserIds = assignedUsersByKey[srcKey] ?? [];
             for (const uid of srcUserIds) {
-              copyInserts.push({ weekly_session_id: newRow.id, user_id: uid });
+              copyInserts.push({
+                template_id: newRow.template_id,
+                week_start: newRow.week_start,
+                user_id: uid,
+              });
             }
           }
         }
