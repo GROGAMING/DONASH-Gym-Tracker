@@ -25,7 +25,7 @@ type ExerciseSummary = {
   totalSets: number;
   totalVolume: number;
   bestSet: SetEntry | null;
-  last10: SetEntry[];
+  allSets: SetEntry[];
 };
 
 type SummaryData = {
@@ -99,8 +99,15 @@ function SearchInput({ placeholder, value, onChange }: { placeholder: string; va
   );
 }
 
+const SETS_PREVIEW = 10;
+
 function ExerciseCard({ ex }: { ex: ExerciseSummary }) {
   const [open, setOpen] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  const visibleSets = showAll ? ex.allSets : ex.allSets.slice(0, SETS_PREVIEW);
+  const hasMore = ex.allSets.length > SETS_PREVIEW;
+
   return (
     <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
       <button
@@ -124,20 +131,44 @@ function ExerciseCard({ ex }: { ex: ExerciseSummary }) {
 
       {open && (
         <div className="border-t border-border px-4 pb-4">
-          <p className="text-xs font-semibold text-muted-foreground mt-3 mb-2">Last 10 sets</p>
-          {ex.last10.length === 0 ? (
+          <div className="flex items-center justify-between mt-3 mb-2">
+            <p className="text-xs font-semibold text-muted-foreground">
+              {showAll ? `All ${ex.allSets.length} sets` : `Recent sets`}
+            </p>
+            {hasMore && (
+              <button
+                type="button"
+                onClick={() => setShowAll((p) => !p)}
+                className="text-xs font-semibold text-primary hover:opacity-80 transition-opacity"
+              >
+                {showAll ? "Show less" : `View all ${ex.allSets.length} sets`}
+              </button>
+            )}
+          </div>
+          {ex.allSets.length === 0 ? (
             <p className="text-xs text-muted-foreground">No sets logged.</p>
           ) : (
             <div className="space-y-1.5">
-              {ex.last10.map((s, i) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{fmtDate(s.created_at)} · Set {s.set_number ?? i + 1}</span>
-                  <span className="font-semibold text-foreground">
+              {visibleSets.map((s, i) => (
+                <div key={s.id ?? i} className="flex items-center justify-between text-xs py-0.5">
+                  <span className="text-muted-foreground">
+                    {fmtDate(s.created_at)} · Set {s.set_number ?? i + 1}
+                  </span>
+                  <span className="font-semibold text-foreground tabular-nums">
                     {fmtWeight(s.weight)} × {fmtReps(s.reps)}
                   </span>
                 </div>
               ))}
             </div>
+          )}
+          {hasMore && !showAll && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="mt-3 w-full text-xs font-semibold text-muted-foreground hover:text-foreground border border-border rounded-xl py-2 transition-colors"
+            >
+              View all {ex.allSets.length} sets
+            </button>
           )}
         </div>
       )}
